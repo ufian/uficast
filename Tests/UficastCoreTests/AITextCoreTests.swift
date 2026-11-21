@@ -59,6 +59,16 @@ private func temporaryDirectory() -> URL {
     #expect(translate.contains("<s1>"))
 }
 
+@Test func translateNamesTheDirectionExplicitly() {
+    let toEnglish = AITextPrompt.build(action: .translate, text: "Привет <s1>всем</s1>, это тест API", hasMarkers: true)
+    #expect(toEnglish.contains("from Russian into English"))
+    let toRussian = AITextPrompt.build(action: .translate, text: "<s1>Hello</s1> world &lt;b&gt;", hasMarkers: true)
+    #expect(toRussian.contains("from English into Russian"))
+    #expect(toRussian.contains("must be written in Russian"))
+    #expect(!AITextPrompt.isMainlyRussian("<s12>abc</s12> 123"))
+    #expect(AITextPrompt.isMainlyRussian("ёЙ"))
+}
+
 @Test func cleanStripsEchoedTagsAndWhitespace() {
     #expect(AITextPrompt.clean("\n<text>\nHello\n</text>\n") == "Hello")
     #expect(AITextPrompt.clean("  Hi there \n") == "Hi there")

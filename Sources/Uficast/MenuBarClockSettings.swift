@@ -6,32 +6,34 @@ struct MenuBarClockSettings: View {
     @State private var format = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Menu Bar Calendar").font(.title2.bold())
-            Toggle("Show date and time in the Uficast button", isOn: Binding(
-                get: { model.configuration.menuBarClock.isEnabled },
-                set: { value in save { $0.isEnabled = value } }))
-            Text("Click the Uficast button to browse months. The calendar does not read events or accounts.")
-                .font(.caption).foregroundStyle(.secondary)
-            Text("Date & Time Format").fontWeight(.medium)
-            HStack {
-                TextField("EEE HH:mm:ss", text: $format).textFieldStyle(.roundedBorder)
-                    .onSubmit { saveFormat() }
-                Button("Apply") { saveFormat() }
-                    .disabled(format == model.configuration.menuBarClock.dateFormat)
-                Button("Reset") { format = MenuBarClockPreferences().dateFormat; saveFormat() }
+        SettingsCard(title: "Menu Bar Clock", systemImage: "clock") {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 14) {
+                    Toggle("Show clock", isOn: Binding(
+                        get: { model.configuration.menuBarClock.isEnabled },
+                        set: { value in save { $0.isEnabled = value } }))
+                        .help("Show date and time in the Uficast button.")
+                    Toggle("Show icon", isOn: Binding(
+                        get: { model.configuration.menuBarClock.showsIcon },
+                        set: { value in save { $0.showsIcon = value } }))
+                        .help("Show a calendar icon with today's date beside the clock.")
+                    Spacer()
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Text(preview(context.date)).monospacedDigit().foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    InfoButton(text: "Click the Uficast button to browse months. The calendar does not read events or accounts.\n\nFormat: EEE = weekday · HH = 24-hour · h = 12-hour · mm = minutes · ss = seconds · a = AM/PM. Quote literal text with single quotes.")
+                }
+                HStack(spacing: 8) {
+                    TextField("EEE HH:mm:ss", text: $format).textFieldStyle(.roundedBorder)
+                        .font(.system(.callout, design: .monospaced))
+                        .onSubmit { saveFormat() }
+                    Button("Apply") { saveFormat() }
+                        .disabled(format == model.configuration.menuBarClock.dateFormat)
+                    Button("Reset") { format = MenuBarClockPreferences().dateFormat; saveFormat() }
+                }
             }
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                Text("Preview: \(preview(context.date))").monospacedDigit().foregroundStyle(.secondary)
-            }
-            Text("EEE = weekday · HH = 24-hour · h = 12-hour · mm = minutes · ss = seconds · a = AM/PM. Quote literal text with single quotes.")
-                .font(.caption).foregroundStyle(.secondary)
-            Toggle("Show Icon", isOn: Binding(
-                get: { model.configuration.menuBarClock.showsIcon },
-                set: { value in save { $0.showsIcon = value } }))
-                .help("Show a calendar icon with today's date beside the clock.")
+            .disabled(model.isBusy || model.isReadOnly)
         }
-        .disabled(model.isBusy || model.isReadOnly)
         .onAppear { format = model.configuration.menuBarClock.dateFormat }
         .onChange(of: model.configuration.menuBarClock.dateFormat) { _, value in format = value }
     }

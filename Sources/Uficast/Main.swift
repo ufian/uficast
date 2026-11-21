@@ -54,7 +54,7 @@ struct UficastMain {
             application.finishLaunching()
             do {
                 try AITextVerification.run()
-                print("PASS: AI text rich-text round trip, pasteboards, panel controls and clipboard/Service flows (cancel, retry, deadline, fallback).")
+                print("PASS: AI text rich-text round trip, pasteboards, panel controls and clipboard/link flows (cancel, retry, text source, refused links, formatting fallback).")
             } catch {
                 FileHandle.standardError.write(Data("\(error.localizedDescription)\n".utf8))
                 exit(1)
@@ -87,6 +87,19 @@ struct UficastMain {
             }
             return
         }
+        if CommandLine.arguments.contains("--verify-usage-order") {
+            let application = NSApplication.shared
+            application.setActivationPolicy(.prohibited)
+            application.finishLaunching()
+            do {
+                try LauncherPanelController().verifyUsageOrder()
+                print("PASS: launches reorder the empty search by frequency, are reported for saving and survive a restart.")
+            } catch {
+                FileHandle.standardError.write(Data("\(error.localizedDescription)\n".utf8))
+                exit(1)
+            }
+            return
+        }
         if CommandLine.arguments.contains("--verify-calculator") {
             let application = NSApplication.shared
             application.setActivationPolicy(.prohibited)
@@ -94,6 +107,19 @@ struct UficastMain {
             do {
                 try LauncherPanelController().verifyCalculator()
                 print("PASS: calculator rows, copy on Enter, history suggestions, Tab edit and remembered draft.")
+            } catch {
+                FileHandle.standardError.write(Data("\(error.localizedDescription)\n".utf8))
+                exit(1)
+            }
+            return
+        }
+        if CommandLine.arguments.contains("--verify-pull-requests") {
+            let application = NSApplication.shared
+            application.setActivationPolicy(.prohibited)
+            application.finishLaunching()
+            do {
+                try LauncherPanelController().verifyPullRequests()
+                print("PASS: pull-request mode lists, filters, opens, leaves and ignores late results.")
             } catch {
                 FileHandle.standardError.write(Data("\(error.localizedDescription)\n".utf8))
                 exit(1)
@@ -157,7 +183,12 @@ struct UficastMain {
                 } else {
                     let model = ViewPreview.settingsModel()
                     if CommandLine.arguments.contains("--general") { model.section = "General" }
-                    if CommandLine.arguments[flag] == "--preview-script-editor" {
+                    if CommandLine.arguments.contains("--shortcut-guide") {
+                        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 420),
+                                              styleMask: [.borderless], backing: .buffered, defer: false)
+                        window.contentView = NSHostingView(rootView: ShortcutGuideSheet(action: .rewrite, onDone: {}))
+                        try ViewPreview.write(window.contentView!, to: path)
+                    } else if CommandLine.arguments[flag] == "--preview-script-editor" {
                         var command = model.configuration.scripts[0]
                         command.requiresArgument = true
                         command.argumentPlaceholder = "Search text"

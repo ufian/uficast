@@ -1,103 +1,74 @@
 import AppKit
 import UficastCore
 
-/// Serves both AI text entry points: a clipboard hotkey and the macOS Services.
-/// Exactly one request is active; anything that finishes for an older request is ignored.
+/// Serves the AI text entry points: the clipboard hotkeys and `uficast://` links opened by a
+/// Shortcut. Both show the result first; Enter copies it. Exactly one request is active;
+/// anything that finishes for an older request is ignored.
 @MainActor
-final class AITextCoordinator: NSObject {
+final class AITextCoordinator {
     private struct Request {
         var id: UUID
         let action: AITextAction
         let source: RichText
-        var mode: AITextPanelController.Mode
-        var service: NSPasteboard?
-        var note: String?
     }
-    private enum ServiceDecision { case confirm(NSAttributedString, rich: Bool), cancel }
 
     var command = AITextPreferences.defaultCommand
     /// Called before the panel appears, so the launcher can hide.
     var beforePresent: (() -> Void)?
+    /// Short, text-free notes about what happened (a link arrived, the panel lost focus), so
+    /// Recent Runs can show why a request seemed to do nothing.
+    var onEvent: ((String) -> Void)?
 
     private let panel: AITextPanelController
     private let runner: AITextRunning
     private let general: NSPasteboard
-    private let serviceDeadline: TimeInterval
     private let timeout: Double
     private var current: Request?
-    private var isServing = false
-    private var serviceDecision: ServiceDecision?
 
-    init(panel: AITextPanelController, runner: AITextRunning, general: NSPasteboard = .general,
-         serviceDeadline: TimeInterval = 85, timeout: Double = 60) {
+    init(panel: AITextPanelController, runner: AITextRunning, general: NSPasteboard = .general, timeout: Double = 60) {
         self.panel = panel
         self.runner = runner
         self.general = general
-        self.serviceDeadline = serviceDeadline
         self.timeout = timeout
-        super.init()
         panel.onConfirm = { [weak self] in self?.confirm($0) }
         panel.onCancel = { [weak self] in self?.cancelCurrent() }
         panel.onRetry = { [weak self] in self?.retry() }
+        panel.onLostFocus = { [weak self] in self?.onEvent?("The result panel closed because it lost focus.") }
     }
 
     func runFromClipboard(_ action: AITextAction) {
         guard let text = RichTextBridge.read(general) else {
-            cancelCurrent()
-            beforePresent?()
-            panel.showMessage("Copy text first.")
+            show("Copy text first.")
             return
         }
-        start(action, text: text, rich: RichTextBridge.isRich(general), mode: .copy, service: nil)
+        start(action, text: text, rich: RichTextBridge.isRich(general))
     }
 
-    @objc func rewriteText(_ pboard: NSPasteboard, userData: String, error: AutoreleasingUnsafeMutablePointer<NSString>) {
-        serve(.rewrite, pboard, error)
-    }
-
-    @objc func translateText(_ pboard: NSPasteboard, userData: String, error: AutoreleasingUnsafeMutablePointer<NSString>) {
-        serve(.translate, pboard, error)
-    }
-
-    /// The requesting app waits for this method to return. Keep handling events until the
-    /// owner decides or the deadline passes; only Enter writes back.
-    private func serve(_ action: AITextAction, _ pboard: NSPasteboard, _ error: AutoreleasingUnsafeMutablePointer<NSString>) {
-        guard !isServing else { error.pointee = "Uficast is already working on a request."; return }
-        guard let text = RichTextBridge.read(pboard) else { error.pointee = "No text was selected."; return }
-        isServing = true
-        serviceDecision = nil
-        defer { isServing = false; serviceDecision = nil }
-        start(action, text: text, rich: RichTextBridge.isRich(pboard), mode: .replace, service: pboard)
-        let deadline = Date().addingTimeInterval(serviceDeadline)
-        while serviceDecision == nil, Date() < deadline {
-            if let event = NSApp.nextEvent(matching: .any, until: Date().addingTimeInterval(0.05), inMode: .default, dequeue: true) {
-                NSApp.sendEvent(event)
-            }
+    /// A Shortcut passes the selection (or the clipboard, which the Shortcut falls back to)
+    /// in the link. A link without text uses the clipboard here as well; anything that is not
+    /// one of our links is ignored.
+    func runFromURL(_ url: URL) {
+        guard let request = AITextURL.parse(url) else { return }
+        onEvent?("\(request.action.title) link received (\(request.text?.count ?? 0) characters).")
+        guard !request.isTooLong else {
+            show("The text is too long (the limit is \(AITextURL.maximumTextLength.formatted()) characters).")
+            return
         }
-        switch serviceDecision {
-        case .confirm(let result, let rich)?:
-            RichTextBridge.write(result, rich: rich, to: pboard)
-            RichTextBridge.write(result, rich: rich, to: general)
-        case .cancel?:
-            break
-        case nil where current?.service === pboard:
-            // Time ran out: keep the request, but Enter can only copy now.
-            current?.service = nil
-            current?.mode = .copy
-            current?.note = "Time ran out for replacing."
-            panel.switchToCopyMode(note: "Time ran out for replacing.")
-        case nil:
-            break
-        }
+        guard let text = request.text else { runFromClipboard(request.action); return }
+        start(request.action, text: NSAttributedString(string: text), rich: false)
     }
 
-    private func start(_ action: AITextAction, text: NSAttributedString, rich: Bool,
-                       mode: AITextPanelController.Mode, service: NSPasteboard?) {
+    private func show(_ message: String) {
         cancelCurrent()
-        current = Request(id: UUID(), action: action, source: RichTextBridge.split(text, isRich: rich),
-                          mode: mode, service: service, note: nil)
         beforePresent?()
-        panel.showWorking(action: action, mode: mode)
+        panel.showMessage(message)
+    }
+
+    private func start(_ action: AITextAction, text: NSAttributedString, rich: Bool) {
+        cancelCurrent()
+        current = Request(id: UUID(), action: action, source: RichTextBridge.split(text, isRich: rich))
+        beforePresent?()
+        panel.showWorking(action: action)
         launch()
     }
 
@@ -105,8 +76,7 @@ final class AITextCoordinator: NSObject {
         guard var request = current else { return }
         request.id = UUID()
         current = request
-        panel.showWorking(action: request.action, mode: request.mode)
-        if let note = request.note { panel.switchToCopyMode(note: note) }
+        panel.showWorking(action: request.action)
         launch()
     }
 
@@ -116,20 +86,13 @@ final class AITextCoordinator: NSObject {
         let prompt = AITextPrompt.build(action: request.action, text: encoded.text, hasMarkers: encoded.hasMarkers)
         let styleCount = encoded.hasMarkers ? request.source.styles.count : 0
         let (runner, command, timeout, id) = (self.runner, self.command, self.timeout, request.id)
-        // AppKit may deliver a Service request from a main-queue block. Inside that block the
-        // main queue (and with it MainActor jobs) is not serviced by our nested event loop, so
-        // the result comes back as a run-loop block, which every run of the default mode performs.
-        Task.detached { [weak self] in
+        Task { [weak self] in
             let outcome: Result<String, Error>
             do { outcome = .success(try await runner.run(command: command, prompt: prompt, timeout: timeout)) }
             catch { outcome = .failure(error) }
-            RunLoop.main.perform(inModes: [.default, .eventTracking, .modalPanel]) {
-                MainActor.assumeIsolated {
-                    switch outcome {
-                    case .success(let output): self?.finish(id, output: output, styleCount: styleCount)
-                    case .failure(let error): self?.fail(id, error)
-                    }
-                }
+            switch outcome {
+            case .success(let output): self?.finish(id, output: output, styleCount: styleCount)
+            case .failure(let error): self?.fail(id, error)
             }
         }
     }
@@ -137,7 +100,7 @@ final class AITextCoordinator: NSObject {
     private func finish(_ id: UUID, output: String, styleCount: Int) {
         guard let request = current, request.id == id else { return }
         let cleaned = AITextPrompt.clean(output)
-        var note = request.note
+        var note: String?
         let segments: [StyledSegment]
         if let decoded = SpanMarkup.decode(cleaned, styleCount: styleCount) {
             segments = decoded
@@ -145,7 +108,7 @@ final class AITextCoordinator: NSObject {
             segments = [StyledSegment(text: Self.withoutMarkers(cleaned), style: nil)]
             note = "Formatting could not be kept."
         }
-        // Never offer an empty result: Enter in a Service would delete the selection.
+        // Never offer an empty result: Enter would put nothing on the clipboard.
         guard segments.contains(where: { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
             panel.showFailure(AITextError.emptyOutput.localizedDescription)
             return
@@ -160,18 +123,13 @@ final class AITextCoordinator: NSObject {
 
     private func confirm(_ result: NSAttributedString) {
         guard let request = current else { return }
-        if request.service != nil, request.mode == .replace {
-            serviceDecision = .confirm(result, rich: request.source.isRich)
-        } else {
-            RichTextBridge.write(result, rich: request.source.isRich, to: general)
-        }
+        RichTextBridge.write(result, rich: request.source.isRich, to: general)
         current = nil
         panel.dismiss()
     }
 
     private func cancelCurrent() {
-        guard let request = current else { return }
-        if request.service != nil { serviceDecision = .cancel }
+        guard current != nil else { return }
         current = nil
         panel.dismiss()
         Task { [runner] in await runner.cancel() }

@@ -2,7 +2,7 @@ import Foundation
 
 public struct LauncherEntry: Identifiable, Hashable, Sendable {
     public enum Kind: String, Codable, Sendable {
-        case application, script, builtIn, calculator, history
+        case application, script, builtIn, calculator, history, pullRequest
         public var title: String {
             switch self {
             case .application: "Application"
@@ -10,6 +10,7 @@ public struct LauncherEntry: Identifiable, Hashable, Sendable {
             case .builtIn: "Command"
             case .calculator: "Calculator"
             case .history: "History"
+            case .pullRequest: "Pull Request"
             }
         }
     }
@@ -19,24 +20,32 @@ public struct LauncherEntry: Identifiable, Hashable, Sendable {
     public var fileURL: URL
     public var alias: String?
     public var isEnabled: Bool
+    /// False makes the alias match only exactly, never as a prefix of the query.
+    public var matchesAliasByPrefix: Bool
 
     public init(id: String, name: String, kind: Kind = .application, fileURL: URL,
-                alias: String? = nil, isEnabled: Bool = true) {
+                alias: String? = nil, isEnabled: Bool = true, matchesAliasByPrefix: Bool = true) {
         self.id = id
         self.name = name
         self.kind = kind
         self.fileURL = fileURL
         self.alias = alias
         self.isEnabled = isEnabled
+        self.matchesAliasByPrefix = matchesAliasByPrefix
     }
 }
 
-public struct UsageRecord: Sendable {
+public struct UsageRecord: Codable, Equatable, Sendable {
     public var count: Int
     public var lastUsed: Date
     public init(count: Int = 0, lastUsed: Date = .distantPast) {
         self.count = count
         self.lastUsed = lastUsed
+    }
+
+    public mutating func record(at date: Date = Date()) {
+        count += 1
+        lastUsed = date
     }
 }
 

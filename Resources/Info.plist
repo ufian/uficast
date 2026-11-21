@@ -12,23 +12,11 @@
     <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSAppleEventsUsageDescription</key><string>Run your configured AppleScript commands to control the applications you select.</string>
-    <key>NSServices</key>
+    <key>CFBundleURLTypes</key>
     <array>
         <dict>
-            <key>NSMenuItem</key><dict><key>default</key><string>Rewrite with Uficast</string></dict>
-            <key>NSMessage</key><string>rewriteText</string>
-            <key>NSSendTypes</key><array><string>public.rtf</string><string>public.utf8-plain-text</string></array>
-            <key>NSReturnTypes</key><array><string>public.rtf</string><string>public.utf8-plain-text</string></array>
-            <key>NSTimeout</key><string>90000</string>
-            <key>NSRequiredContext</key><dict/>
-        </dict>
-        <dict>
-            <key>NSMenuItem</key><dict><key>default</key><string>Translate with Uficast</string></dict>
-            <key>NSMessage</key><string>translateText</string>
-            <key>NSSendTypes</key><array><string>public.rtf</string><string>public.utf8-plain-text</string></array>
-            <key>NSReturnTypes</key><array><string>public.rtf</string><string>public.utf8-plain-text</string></array>
-            <key>NSTimeout</key><string>90000</string>
-            <key>NSRequiredContext</key><dict/>
+            <key>CFBundleURLName</key><string>dev.ufian.Uficast.link</string>
+            <key>CFBundleURLSchemes</key><array><string>uficast</string></array>
         </dict>
     </array>
 </dict></plist>

@@ -71,10 +71,37 @@ Follow [requirements](plan/REQUIREMENTS.md). Caps Lock remapping, login items, o
   - In an Electron app (for example Teams or Slack), copy English text, press the rewrite shortcut and check the result. Enter, then Cmd+V pastes it.
   - Repeat with Russian and English text for translate.
   - With an empty clipboard or an image, the panel says "Copy text first."
-- **Services.** Assign shortcuts to "Rewrite with Uficast" and "Translate with Uficast" in Keyboard Shortcuts → Services. In Notes, Mail and a Safari text field, select text and use each Service; Enter replaces the selection. Esc while "Working…" and while the result is shown leaves the text unchanged.
-- **Formatting.** Select text that contains bold, italics and a link, then rewrite it through the Service. The replacement keeps them. Do the same through the clipboard and paste into Mail.
-- **Timeout.** Leave a Service result open for more than about 85 s. The panel switches to "Time ran out for replacing." and Enter only copies.
+- **Create Shortcut.** In General → AI Text, click Create Rewrite Shortcut. Shortcuts opens an empty shortcut, the script is on the clipboard and the five steps appear in Settings. Follow them, then repeat for Translate. Note anything in the steps that does not match Shortcuts' real wording.
+- **Shortcut run.** Run the shortcut from the Services menu or from its details window. With text selected in Notes or Safari, Uficast shows the result for that text; with nothing selected, for the clipboard. Enter copies it, Esc cancels, nothing replaces the selection. Try a multi-line text with `&`, `+` and Cyrillic characters.
+- **Shortcut keyboard shortcut.** Assign one with ⌃⌘⇧ (⌃⌘R was silently taken by another app on the owner's Mac) in the shortcut's details and press it in Notes, Safari and an Electron app. Note where the selection arrives and where the clipboard is used instead.
+- **Shortcut hotkey diagnosis.** Press the shortcut's keyboard shortcut (with text selected in Notes, then with only the clipboard), then open Settings and click Recent Runs. "Rewrite link received (N characters)." means the shortcut ran and the link arrived; no such line means the hotkey never ran the shortcut. "The result panel closed because it lost focus." means the panel opened and was closed by a focus change.
+- **Links.** `open "uficast://rewrite?text=we%20was%20here"` shows the panel with a result; a link with more than 20,000 characters shows "The text is too long". Opening a link must not copy anything until Enter.
+- **Old Services.** After the update the old "Rewrite with Uficast" Services entries may linger in the Services menu until `/System/Library/CoreServices/pbs -update` or a new login; they no longer do anything.
+- **Formatting.** Select text that contains bold, italics and a link, copy it and use the clipboard shortcut, then paste into Mail. The bold and link are kept. Text that arrives through a Shortcut link is plain.
 - **Codex.** If Codex is installed, enter its command and check that only the answer appears.
+
+## GitHub pull requests
+
+Owner-led. Quit Uficast normally before installing the build. The not-installed message is covered by unit tests only; it is not on this list because it needs `gh` to be absent from the app's `PATH`.
+
+- [ ] With the real `gh` signed in and a few real open pull requests: type `gh`, press Tab. After "Loading pull requests…" the list shows your open pull requests, newest first, each with its repository and number, and drafts marked "Draft".
+- [ ] Type a few letters of a title: the list narrows by fuzzy match and the first row is selected. Type a Russian-layout version of the same letters: the same rows appear. Up/Down move the selection.
+- [ ] Press Enter on a row: the pull request opens in the default browser, the launcher closes and the browser comes forward. Check that it is the selected one.
+- [ ] Sign `gh` out (`gh auth logout`, owner-initiated) and enter the mode after the 5-minute lifetime has passed or after a relaunch: the lower area shows a failure text, not a frozen launcher. Sign in again; leaving and entering the mode retries. There must be no automatic retry.
+- [ ] First Tab latency: note how long the first load takes with the real `gh`, and that a second entry within 5 minutes shows the list at once.
+- [ ] Wait more than 5 minutes (leave Uficast running), open a new pull request on the web, then enter the mode again: the new pull request appears after the reload.
+- [ ] Press Tab and Enter on `gh` while Keep Awake is active and while it is off: its state, the cup/zzz icon and any assertion never change.
+- [ ] Esc returns to the normal search with the previous query; Backspace in an empty filter does the same; Esc in normal search closes the launcher. Hide the launcher while it is loading, reopen it: no stale list, error or mode is shown.
+- [ ] Look at the mode in light and dark appearance: the token, filter field, rows (title, dim `owner/repo #number`, Draft label), loading text and hint are aligned and readable. Note anything cramped.
+- [ ] Native `--verify-pull-requests` uses fixtures and a fake opener; it does not prove the real `gh`, the browser, the physical typing flow or the on-screen layout.
+
+## Compact settings
+
+- [ ] Open Settings → General: everything fits without scrolling at the default size. Make the window smaller: it scrolls only when it must.
+- [ ] Every ⓘ opens its explanation. Recent Runs in the footer lists active runs with Cancel and the latest outcomes.
+- [ ] Each control still works as before: start at login, launcher shortcut record/reset/retry, clock toggles/format/Apply/Reset, Keep Awake and its timers, Caps Lock mapping and Check Mapping, AI command Apply/reset, both clipboard hotkeys with ×, folders Save/Refresh, Import/Export/Restore.
+- [ ] Create Rewrite Shortcut opens Shortcuts and a sheet with the five steps; Done and Esc close the sheet.
+- [ ] Check light and dark appearance and note anything cramped.
 
 ## Calculator
 
@@ -84,6 +111,13 @@ Follow [requirements](plan/REQUIREMENTS.md). Caps Lock remapping, login items, o
 - [ ] Type `7*`, press Esc and reopen: `7*` is back and selected. Typing `notes` replaces it; after closing with `notes` typed, the launcher reopens empty. Quit and relaunch with an unfinished formula: it is restored.
 - [ ] `1password`, `7-zip` and `calendar` still behave as application searches.
 - [ ] Native `--verify-calculator` uses a private pasteboard and fixtures; it does not prove physical typing or paste into another app.
+
+## Frequency ordering
+
+- [ ] Launch two different apps from the launcher, one of them three times. Quit and reopen Uficast: the empty search lists the three-time app first, then the other, then the rest alphabetically.
+- [ ] Type a short prefix shared by two apps: the more used one comes first. An exact alias still beats a heavily used app.
+- [ ] Activate a running app with its app hotkey a few times; it moves up the empty list. Hiding it does not count.
+- [ ] Native `--verify-usage-order` uses fixtures and a second controller to stand in for a restart; it does not prove the real relaunch.
 
 ## Day-O calendar experiment
 

@@ -205,6 +205,18 @@ Rewrite into correct, simple English and translate EN↔RU through an owner-edit
 
 Evaluate formulas typed in the launcher, copy the result on Enter, remember calculations and offer them as suggestions below the results, and restore an unfinished formula when the launcher reopens. See REQUIREMENTS "Calculator" and ARCHITECTURE "Calculator (Stage 6o)". Validate with core tests (evaluator, formatting, query detection, history, draft, codable state), `--verify-calculator` on a private pasteboard, light/dark previews and a release build. Physical typing, paste into another app and relaunch persistence need the owner's observation.
 
+## Stage 6p — Persistent frequency ordering (owner addition)
+
+Remember launch counts across restarts so the empty search and equal matches stay ordered by frequency. See REQUIREMENTS "Frequency ordering" and ARCHITECTURE "usage.v1". Validate with core tests (record, codable round trip, restart ordering, recency tie-break, corrupt/negative data, entry limit, no paths), `--verify-usage-order` and a release build. Real relaunch ordering needs the owner's observation.
+
+## Stage 6q — Shortcuts instead of Services (owner addition)
+
+Remove the macOS Services entry point (nested event loop, replace mode, `NSServices`) and add the `uficast://rewrite|translate?text=…` link and Settings buttons for a Shortcuts-based entry. The first try (a generated `.shortcut` file) was rejected by Shortcuts as unsigned, so the buttons now open an empty shortcut, copy a script and show the steps. Validate with core tests (link parsing; the script run in zsh against `AITextURL`), `--verify-ai-text` (link flows, refused links, clipboard formatting) and a release build. Building the shortcut, selection input and its keyboard shortcut need the owner's observation.
+
+## Stage 6r — Compact settings (owner addition)
+
+Rearrange Settings → General into two columns of cards with one-row settings, ⓘ popovers for long explanations, a slim top bar and a footer with Recent Runs, so it fits the window without scrolling. Keep every control's behavior. Validate with light/dark offscreen previews (including a very small window), the existing native checks that host the Settings view, core tests and a release build. The owner's hands-on look is required.
+
 ## Stage 7 — Daily-use verification and source-build handoff
 
 Tasks:

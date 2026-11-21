@@ -47,7 +47,7 @@ public struct SearchIndex: Sendable {
         let score: Int
         if query.isEmpty { tier = 6; score = 0 }
         else if item.alias == query { tier = 0; score = 0 }
-        else if let alias = item.alias, alias.hasPrefix(query) { tier = 1; score = 0 }
+        else if item.entry.matchesAliasByPrefix, let alias = item.alias, alias.hasPrefix(query) { tier = 1; score = 0 }
         else if item.name == query { tier = 2; score = 0 }
         else if item.name.hasPrefix(query) { tier = 3; score = 0 }
         else if item.name.contains(query) { tier = 4; score = 0 }
@@ -71,7 +71,7 @@ public struct SearchIndex: Sendable {
         return left.indexed.entry.id < right.indexed.entry.id
     }
 
-    private static func fuzzyScore(query: [Character], name: [Character]) -> Int? {
+    static func fuzzyScore(query: [Character], name: [Character]) -> Int? {
         var next = 0
         var previous = -2
         var score = 0

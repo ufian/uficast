@@ -27,7 +27,7 @@ Recorded on November 18, 2026; updated the same day to ordinary Cmd+Space with n
 | Built-in commands | `caffeine` / `cafe` enables indefinite Keep Awake; `decaffeine` / `decafe` disables it. Fuzzy and wrong-layout search apply. |
 | Keep Awake (added November 18) | Built-in Caffeine-style prevention of idle display and Mac sleep; native app-owned power assertion. Owner clarified that the screen must stay on while caffeine is active. |
 | Menu bar calendar | The clock is the single Uficast menu-bar button. Use Day-O’s standard native calendar appearance, month browsing and Today; configurable date/time format and Show Icon. Upper menu bar only, no Dock addition. |
-| AI text (added November 19) | Rewrite selected or copied English into correct, simple English, and translate EN↔RU, through an owner-editable CLI command (default `claude -p` with Claude Haiku 5.5). Clipboard shortcuts and macOS Services; the result is shown first, Enter inserts or copies, Esc cancels; inline formatting is kept. |
+| AI text (added November 19) | Rewrite selected or copied English into correct, simple English, and translate EN↔RU, through an owner-editable CLI command (default `claude -p` with Claude Haiku 5.5). Clipboard shortcuts and `uficast://` links opened by Shortcuts that Settings creates; the result is shown first, Enter copies it, Esc cancels; inline formatting is kept for clipboard text. |
 | Deferred | Kasa/Shortcuts integration. |
 | Continuity | English plan in the repository, committed to Git; implementation can span sessions. |
 
@@ -127,13 +127,40 @@ Design: `docs/superpowers/specs/2026-11-19-ai-text-rewrite-translate-design.md` 
 - Two actions: Rewrite (correct, simple English) and Translate (Russian → English, otherwise → Russian).
 - Two entry points:
   - Clipboard: the owner copies text and presses a Uficast shortcut recorded in General. Enter copies the result for Cmd+V.
-  - macOS Services "Rewrite with Uficast" and "Translate with Uficast": the owner selects text and uses the Service, with its shortcut assigned in Keyboard Shortcuts → Services. Enter replaces the selection and also copies the result.
-  - Both entry points show the result first. Esc cancels without changes. A returning Service is disabled by macOS on read-only text; there the clipboard entry point applies.
+  - Shortcuts (owner decision, November 20, 2026, replacing the macOS Services entry point, which the owner found useless): Settings has "Create Rewrite Shortcut" and "Create Translate Shortcut". Each opens an empty shortcut in Shortcuts, copies a script for its Run Shell Script action to the clipboard and shows the remaining steps in Settings. The shortcut is a Quick Action that takes the selected text where the app offers it, otherwise the clipboard, and opens `uficast://rewrite?text=…` or `uficast://translate?text=…`. Enter copies the result; nothing replaces the selection, and formatting of a linked text is not kept (plain text only).
+  - Both entry points show the result first. Esc cancels without changes.
+  - A `uficast://` link only starts a request. Text over 20,000 characters is refused and a link without text uses the clipboard. Observed on November 20, 2026: Shortcuts refuses to import a generated `.shortcut` file ("Importing unsigned shortcut files is not supported") and `shortcuts sign` needs an iCloud sign-in, so the owner builds the shortcut by hand from the steps.
 - The command is an owner-editable shell command line. It gets the prompt on stdin and prints only the answer, so the model can be changed by hand or the CLI replaced (for example Codex).
   - Default: `claude -p --model claude-haiku-5-5 --tools "" --strict-mcp-config --disable-slash-commands --no-session-persistence --setting-sources project,local`.
   - The selected text is never placed in argv or shell text.
 - Inline formatting (bold, italics, links, fonts and colors of runs) is kept through `<sN>` span markers. If the model breaks them, the result falls back to the selection's base style with a visible note.
 - Still no Accessibility, Input Monitoring or synthetic input. Uficast stores no selected text or results; the configured CLI keeps data under its own settings.
+
+## Frequency ordering (owner addition, November 20, 2026)
+
+- The empty launcher search lists applications and commands by how often they were used through Uficast (launcher or an app hotkey that activates the app), then by recency, then by name. Counts are remembered locally across restarts and never include arguments or paths.
+- Ordering by frequency does not change the match tiers: an exact alias, then name exact/prefix/substring, then fuzzy always come first, and frequency only orders equal matches. Out of scope: time decay, per-query learning.
+
+## GitHub pull requests (owner addition, November 20, 2026)
+
+Design: `docs/superpowers/specs/2026-11-20-github-pull-requests-design.md` (approved with two owner changes: `gh` is found on `PATH`, and a missing `gh` only shows an install message).
+
+- The owner types `gh` in the launcher, presses Tab (Enter does the same), sees their own open pull requests (newest first), types a few letters to narrow the list by title, and presses Enter to open the pull request in the default browser. The launcher then closes and the browser comes forward.
+- The built-in command is named GitHub Pull Requests with default alias `gh`. An explicit user alias `gh` outranks it, as for `cafe`/`decafe`. Unlike `cafe`/`decafe`, the alias matches only exactly: typing `gh` ranks the command first, while `g` alone does not match it by alias (the command can still appear among the matches for `g` through its name, ordered by frequency of use like any other entry). Tab or Enter on the entry only enters the mode and never opens anything.
+- The list comes from the GitHub CLI (`gh`) already installed and signed in on the owner's Mac. Uficast does not talk to GitHub, stores no credentials and writes no pull request data (titles, URLs, repositories) to disk, logs or the exported configuration. Only the command's own usage counter is recorded.
+- Query: open pull requests authored by the owner across all repositories, at most the 100 newest; drafts are included and labelled "Draft". Uficast sorts: newest first for an empty filter, otherwise fuzzy match on the title (with the same U.S./Russian wrong-layout variants as launcher search) with ties newest first. The filter text never reaches `gh`.
+- Escape returns to the normal search with the previous query; Backspace in an empty filter does the same. Hiding the launcher leaves the mode and clears the filter. While loading, typing edits the filter, Enter does nothing and Escape leaves without cancelling the load.
+- The first entry runs `gh` (30 s timeout) and shows "Loading pull requests…". A success is kept in memory for 5 minutes, so re-entering shows it at once; after that the next entry loads again. A failure is never cached and never retried automatically: leaving and entering again is the retry. A late result never changes the visible view, reopens the panel or shows an error.
+- Messages: a missing `gh` shows "GitHub CLI (gh) is not installed. Install it (brew install gh), then run gh auth login." and nothing is installed or attempted. Other failures show the reason plus the first 512 characters of stderr; an empty list shows "You have no open pull requests." A URL that fails to open shows "Could not open the pull request."
+- Still no Accessibility, Input Monitoring or any new permission, no shell string and no launcher text in a command line.
+- Documented limitations, not handled:
+  - More than 100 open pull requests: the oldest are not listed.
+  - `gh`'s default host only. A `GH_HOST` set in a terminal profile is not visible to a GUI app.
+  - `gh` is looked up on the app's `PATH` plus the standard directories (`/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin`, `/bin`, `/usr/sbin`, `/sbin`). A `gh` that is only in a directory added by a terminal profile (for example `~/.local/bin`) counts as not installed.
+  - `gh search prs` uses GitHub's search API: it has search rate limits, and pull requests in organizations that require SSO authorization of the `gh` token may be missing without any error.
+  - No manual refresh control; the list is reloaded on the first entry after 5 minutes. The store has an `invalidate()` for a future control.
+- Out of scope: other queries (review requested, closed, other authors, per repository), other hosts, checkout/review/merge actions, a general "script prints a list" mode, a Settings page, a persisted cache, notifications.
+- Acceptance: a real `gh` run with real pull requests, a signed-out `gh`, the browser opening and the physical Tab/Enter/typing flow are owner-led checks in `docs/MANUAL_TESTS.md`; they are not inferred from fixture tests.
 
 ## Calculator (owner addition, November 19, 2026)
 
