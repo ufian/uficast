@@ -19,6 +19,19 @@ enum ViewPreview {
                       requiresArgument: true, argumentPlaceholder: "Search text", resultMode: .openURL)
     }
 
+    /// Fictional repositories and inert example.com URLs; never loaded from GitHub.
+    static let pullRequests: [PullRequest] = [
+        PullRequest(number: 42, title: "Keep launcher results stable while application icons load",
+                    url: URL(string: "https://example.com/demo/launcher/pull/42")!, repository: "demo/launcher",
+                    createdAt: Date(timeIntervalSince1970: 1_800_000_000), isDraft: false),
+        PullRequest(number: 41, title: "Add keyboard navigation to the settings window",
+                    url: URL(string: "https://example.com/demo/launcher/pull/41")!, repository: "demo/launcher",
+                    createdAt: Date(timeIntervalSince1970: 1_799_900_000), isDraft: false),
+        PullRequest(number: 18, title: "Document the local development workflow",
+                    url: URL(string: "https://example.com/demo/docs/pull/18")!, repository: "demo/docs",
+                    createdAt: Date(timeIntervalSince1970: 1_799_800_000), isDraft: true),
+    ]
+
     static func settingsModel() -> SettingsModel {
         let model = SettingsModel()
         model.isBusy = false

@@ -165,7 +165,7 @@ struct UficastMain {
             }
             return
         }
-        if let flag = CommandLine.arguments.firstIndex(where: { ["--preview-launcher", "--preview-settings", "--preview-script-editor"].contains($0) }) {
+        if let flag = CommandLine.arguments.firstIndex(where: { ["--preview-launcher", "--preview-settings", "--preview-script-editor", "--preview-ai-text"].contains($0) }) {
             guard CommandLine.arguments.indices.contains(flag + 1) else {
                 print("Provide an output PNG path for the preview.")
                 exit(2)
@@ -179,7 +179,10 @@ struct UficastMain {
                 if CommandLine.arguments[flag] == "--preview-launcher" {
                     try LauncherPanelController().renderPreview(to: path, argumentMode: CommandLine.arguments.contains("--argument"),
                         emptyArgument: CommandLine.arguments.contains("--empty-argument"), failure: CommandLine.arguments.contains("--failure"),
-                        calculation: CommandLine.arguments.contains("--calculation"))
+                        calculation: CommandLine.arguments.contains("--calculation"),
+                        pullRequestList: CommandLine.arguments.contains("--pull-requests"))
+                } else if CommandLine.arguments[flag] == "--preview-ai-text" {
+                    try AITextPanelController().renderPreview(to: path)
                 } else {
                     let model = ViewPreview.settingsModel()
                     if CommandLine.arguments.contains("--general") { model.section = "General" }

@@ -128,6 +128,17 @@ final class AITextPanelController: NSObject, NSWindowDelegate {
         spinner.startAnimation(nil)
     }
 
+    /// Documentation fixture only: no coordinator, CLI, clipboard or visible window.
+    func renderPreview(to url: URL) throws {
+        presentsWindow = false
+        showWorking(action: .translate)
+        let text = NSAttributedString(string: "Привет! Релиз готов к проверке.\n\nПожалуйста, проверьте изменения и оставьте комментарии до пятницы.",
+                                      attributes: [.font: Self.resultFont()])
+        showResult(text, note: nil)
+        guard let view = panel.contentView else { return }
+        try ViewPreview.write(view, to: url)
+    }
+
     func showResult(_ text: NSAttributedString, note: String?) {
         result = text
         display(.result, text: Self.displayCopy(text), note: note ?? "", hint: resultHint)

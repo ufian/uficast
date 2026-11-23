@@ -230,7 +230,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate, NSTextFieldDele
     }
 
     func renderPreview(to url: URL, argumentMode: Bool, emptyArgument: Bool = false, failure: Bool = false,
-                       calculation: Bool = false) throws {
+                       calculation: Bool = false, pullRequestList: Bool = false) throws {
         field.stringValue = ""
         setEntries(ViewPreview.applications)
         if calculation {
@@ -255,6 +255,10 @@ final class LauncherPanelController: NSObject, NSWindowDelegate, NSTextFieldDele
             let id = beginScriptRun(ViewPreview.command)
             finishScriptRun(id, command: ViewPreview.command, argument: argumentInput.string,
                 error: "Search Example: Exit code 1 — Unknown input prefix. Expected demo-*.\nCorrect the value and try again.")
+        }
+        if pullRequestList {
+            // Reuse the real mode layout without presenting a window or running gh.
+            configurePullRequests(cached: ViewPreview.pullRequests)
         }
         guard let view = panel.contentView else { return }
         try ViewPreview.write(view, to: url)
@@ -897,6 +901,12 @@ final class LauncherPanelController: NSObject, NSWindowDelegate, NSTextFieldDele
     func enterPullRequests(cached: [PullRequest]?) -> UUID? {
         // Not on a hidden panel, and never twice: a second entry would overwrite previousQuery.
         guard panel.isVisible, !pullRequestMode else { return nil }
+        return configurePullRequests(cached: cached)
+    }
+
+    /// Shared by normal entry and the isolated documentation renderer.
+    @discardableResult
+    private func configurePullRequests(cached: [PullRequest]?) -> UUID? {
         activeRunID = nil
         hideFailure()
         previousQuery = field.stringValue

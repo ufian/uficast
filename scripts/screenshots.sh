@@ -12,3 +12,7 @@ mkdir -p docs/screenshots
 "$binary" --preview-launcher docs/screenshots/argument.png --argument --dark
 "$binary" --preview-settings docs/screenshots/commands.png
 "$binary" --preview-launcher docs/screenshots/error.png --argument --failure
+"$binary" --preview-settings docs/screenshots/general.png --general
+"$binary" --preview-launcher docs/screenshots/calculator.png --calculation
+"$binary" --preview-launcher docs/screenshots/pull-requests.png --pull-requests
+"$binary" --preview-ai-text docs/screenshots/ai-text.png --dark

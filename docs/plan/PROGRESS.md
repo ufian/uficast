@@ -1,10 +1,10 @@
 # Progress and handoff
 
-Last updated: November 20, 2026 (America/Los_Angeles).
+Last updated: November 23, 2026 (America/Los_Angeles).
 
 ## Current state
 
-Requested personal-use features through Stage 6k are implemented; Stage 6l is integrated into main at the owner’s request, with remaining manual acceptance pending. Mandatory: ordinary Cmd+Space (either Command key), no Accessibility or Input Monitoring requirement/request. English UI and repository documents. Implementation checkpoint 69b1310 and README checkpoint 2db8863 were committed and pushed to origin/main. Feature checkpoint 0dfeda7 (inline hotkeys and built-in commands) is also pushed. Decaf icon checkpoint c362fdf is pushed. Script-folder checkpoint dae22c0 is pushed. Alias/error UX checkpoint c50f480 is pushed. Window-shortcut/power checkpoint 7ebcf04 is pushed to origin/main. The calendar increment was developed on codex/day0-calendar-experiment and has now been fast-forward merged into main through 72d765c at the owner’s explicit request. Stage 6m (configurable launcher shortcut, focus-display placement and a clock-contrast experiment) is implemented on main and awaits the owner's hands-on checks. Stage 6n (AI text rewrite and translation) is implemented on branch `feat/ai-text` and awaits review and the owner's checks. Stage 6s (the built-in `gh` GitHub pull requests command) is implemented on main and awaits the owner's manual acceptance.
+Requested personal-use features through Stage 6s are implemented on main. GitHub source checkpoint **b83e24f** was fetched and fast-forwarded into this checkout; the release app has been rebuilt, normally quit, replaced and reopened. README now includes eight fresh native fixture captures. Mandatory: no Accessibility or Input Monitoring requirement/request; Carbon handles Cmd+Space by default and owner-configured alternatives. English UI and repository documents. Remaining hands-on acceptance and the newly observed debug test-runtime failure are recorded below; older checkpoint evidence remains historical.
 
 | Stage | State | Evidence / remaining work |
 | --- | --- | --- |
@@ -30,7 +30,7 @@ Requested personal-use features through Stage 6k are implemented; Stage 6l is in
 | 6q — Shortcuts instead of Services | Implemented on main; file import failed, replaced by guided manual steps; owner reported it works | 107 core tests and `--verify-ai-text` pass. Shortcuts refused the generated file as unsigned. The owner built the shortcut by hand and it works from Cmd+Ctrl+Shift+R (Ctrl+Cmd+R did nothing). Selection input in each app and Electron apps are not individually reported. |
 | 6r — Compact settings | Implemented on main; installed locally; owner look pending | 107 core tests and all native checks pass; light/dark previews inspected. Hands-on use not yet reported. |
 | 6s — GitHub pull requests | Implemented on main; manual acceptance pending | 136 core tests and `--verify-pull-requests` pass (fake `gh`, fake clock, fixtures). A real `gh` run, the browser opening and the physical Tab/Enter flow are not yet observed. |
-| 7 — Daily-use handoff | Partial | README guide, three neutral screenshots and source-only release build/signature verification complete. Hands-on evidence gaps remain. Manual evidence gaps listed below. |
+| 7 — Daily-use handoff | Partial | README refreshed November 23 with eight native demonstration captures and update instructions. Current release build/signature, 136 release core tests and native PR/calculator/AI checks pass. Debug fixture runtime crash and hands-on acceptance gaps remain open. |
 
 ## Implementation map
 
@@ -381,4 +381,25 @@ Known gaps accepted after review (Minor, not fixed): store tests do not pin the 
 
 Documented limitations: at most the 100 newest open pull requests; `gh`'s default host only; `GH_HOST` set in a terminal profile is not visible to a GUI app; a `gh` that is only in a directory added by a terminal profile (for example `~/.local/bin`) counts as not installed; pull requests in SSO-restricted organizations may be missing without any error; no manual refresh control (the list is reloaded on the first entry after 5 minutes).
 
-**Exact next step:** the owner quits Uficast normally, installs/uses the current build, and runs the items under "GitHub pull requests" in `docs/MANUAL_TESTS.md` (real `gh` with real pull requests, signed-out `gh`, first Tab latency, reload after 5 minutes, Keep Awake untouched, Esc/Backspace, light and dark layout). Record the results here. The earlier open items above stay open.
+The installation step above was completed in the November 23 refresh below. The real GitHub/manual acceptance items remain open.
+
+
+## November 23 — GitHub update, rebuild, restart and README refresh
+
+- Owner request: fetch the latest GitHub version, build/restart it, then update README and take fresh screenshots using demonstration data where necessary.
+- Started with a clean main at 4b4414c; fetched origin over the existing SSH remote and fast-forwarded to **b83e24f** (no conflict or history rewriting). Read the updated continuity instructions and feature handoff before proceeding. This checkout has no `local/build.env`; the existing running bundle was the default `dist/Uficast.app`.
+- Default toolchain here is Swift **6.2.3**, arm64, with the installed default macOS SDK. `UFICAST_OUTPUT_ROOT="$PWD/.build/staging" scripts/build.sh` passed release compilation and strict ad-hoc signature verification. SwiftPM's nested sandbox is blocked under the task sandbox, so the build used approved execution outside it. The older MacOSX26.5 SDK workaround was not needed here; this does not resolve the separate toolchain installation recorded on November 19.
+- Normal termination through `NSRunningApplication.terminate()` completed before copying the staging bundle over the installed bundle. Opened the replacement through Launch Services and confirmed a new Uficast process at that same bundle path. Repeated this order after the documentation-preview additions; the final process was **64771**, and the installed executable's SHA-256 matched the staged executable. Never overwrote a running executable or used force termination.
+- Desktop UI inspection could not connect and was interrupted; no real keyboard, menu-navigation, browser or production-window layout check is claimed. Process/bundle evidence establishes restart, while the screenshots below establish fixture view layout only.
+- Regenerated all **eight** README captures and visually inspected every image: launcher, Commands, dark script argument, generic failure/Edit Input, compact General, calculator, GitHub pull requests and dark AI translation. Some older images remained byte-identical. All use public examples; PR repositories/titles are fictional and URLs use example.com, and the AI result is fixed text. No personal config, private script, account PR data or desktop pixels were captured; no real `gh` or AI command ran to create screenshots.
+- Added `--preview-launcher … --pull-requests` and `--preview-ai-text …` and extended `scripts/screenshots.sh`. PR preview reuses the mode-configuration helper; normal entry still requires a visible panel and refuses a second entry. AI preview disables window presentation before filling the real panel. All preview paths bypass AppController and keep callbacks unconnected; no clipboard content is read/written or power, hotkey, mapping, login or privacy setting changed for a capture.
+- README now documents optional CLI dependencies, staged update/normal quit/install, calculator history/drafts, global AI clipboard shortcuts and accurate AI Copy behavior. It labels every screenshot as demonstration content and records reproducible capture commands. Updated screenshot provenance and architecture notes.
+
+Actual checks:
+
+- `scripts/test.sh --disable-sandbox -c release`: **136 tests passed**, exit 0; warm 2,000-app search p95 **9.69 ms**. This verifies the fetched core code, which this documentation increment does not change.
+- Debug `scripts/test.sh --disable-sandbox` aborted twice with signal 6 and **freed pointer was not the last allocation**. A sequential run and isolated `--filter defaultRunnerExecutesAFakeGhFromPath` reproduced it; that same fixture passed in release. A trial explicit forwarding closure did not resolve it and was reverted. Root cause is not established; do not claim debug tests pass or a runtime fix was made. Logs are ignored under `.build/`.
+- Final staged bundle: **--verify-pull-requests**, **--verify-calculator**, **--verify-ai-text** each exited 0 with PASS after the preview changes. The PR check still covers hidden-panel and repeated-entry guards as well as layout. No personal commands or new system grants were used.
+- `scripts/screenshots.sh .build/staging/Uficast.app` rendered all eight files successfully. All relative links in README and the screenshot guide resolve; shell syntax and `git diff --check` passed. Release signing checks passed on both staged and installed copies.
+
+**Exact next step:** investigate the debug-only `defaultRunnerExecutesAFakeGhFromPath` runtime abort on this Swift 6.2.3 installation; use the passing release test command meanwhile. The owner can use the already installed latest app and run the real GitHub pull-request checklist in `docs/MANUAL_TESTS.md` (real/signed-out gh, browser opening, physical Tab/Enter, cache expiry, Esc/Backspace, light/dark), then record outcomes. Existing AI, two-display, caffeine idle/stop/expiry and other manual acceptance gaps remain open.

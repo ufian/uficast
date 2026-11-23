@@ -15,8 +15,8 @@ Uficast includes a Day-O-style clock and native calendar in its single menu-bar 
 - **Script folders** to discover local shell, Python and AppleScript commands, including Raycast title/argument headers.
 - **Local scripts** using shell, AppleScript or another configured interpreter. Pass one unchanged text argument and optionally open a generated URL.
 - **Per-app shortcuts** to show, hide or launch an application.
-- **Keep Awake** with timed or indefinite sessions, plus optional start at login.
-- **AI text**: rewrite copied or selected English into correct, simple English, or translate it between English and Russian, using `claude -p` (Claude Haiku 5.5) or any CLI you configure. The result is shown first, Enter inserts or copies it, and inline formatting is kept.
+- **Keep Awake** keeps the display and Mac awake with timed or indefinite sessions remembered across relaunches, plus optional start at login.
+- **AI text**: rewrite English or translate English ↔ Russian through a CLI you configure. Copy text or use a macOS Shortcut, review the result and press Enter to copy it. Clipboard text can retain inline formatting.
 - **Menu-bar clock and calendar** using the same standard AppKit calendar control as Day-O, with month browsing, Today and customizable format.
 - **Caps Lock → F19** remapping for macOS input-source switching, with mapping ownership and keyboard-conflict diagnostics.
 - **Native menu bar app** with light/dark appearance, a Settings gear in the launcher and one running instance per user.
@@ -25,11 +25,27 @@ No Accessibility or Input Monitoring access is required. The interface is Englis
 
 ## Screenshots
 
-These are captures of the actual app views rendered with a fixed demonstration dataset: standard macOS apps and a generic example script. They do not use personal configuration, scan the installed-app catalog or capture the desktop. The shown aliases and shortcut are examples.
+Refreshed November 23, 2026. These are actual native app views rendered offscreen with demonstration data: standard macOS apps, a generic script, fictional pull requests and a sample translation. The aliases, shortcut, repositories and text are examples. Personal configuration and the desktop are not captured; no script, GitHub CLI or AI command runs to produce these images.
 
 **Launcher** — standard apps, aliases and keyboard navigation.
 
 ![Launcher showing Calculator, Calendar, Notes, Safari and Terminal](docs/screenshots/launcher.png)
+
+**General** — launcher shortcut, clock, Keep Awake, keyboard and AI settings in one window.
+
+![General settings with two columns of compact cards](docs/screenshots/general.png)
+
+**GitHub pull requests** — `gh` → Tab, filter by title, Enter to open. Repositories and pull requests below are fictional.
+
+![GitHub pull request list with full-width titles, repository subtitles and a draft](docs/screenshots/pull-requests.png)
+
+**Calculator** — a live result with saved calculations below it; Enter copies the selected result.
+
+![Calculator showing 24 times 3 equals 72 and example history](docs/screenshots/calculator.png)
+
+**AI Text** — review the translation, then Enter to copy. This is a fixed sample result.
+
+![Dark AI Text panel showing a sample Russian translation and Copy action](docs/screenshots/ai-text.png)
 
 **Commands** — application icons, aliases, enabled state and per-app shortcuts.
 
@@ -54,10 +70,10 @@ Start each implementation session with `PROGRESS.md`.
 
 ## Build and test
 
-Requires macOS 26, Swift 6.2 and Command Line Tools. No external packages.
+Requires macOS 26, Swift 6.2 and Command Line Tools. No external Swift packages. GitHub pull requests additionally need an authenticated `gh`; AI Text needs the CLI configured in Settings. Other launcher features work without those tools.
 
 ```sh
-scripts/test.sh
+scripts/test.sh -c release
 scripts/build.sh
 open dist/Uficast.app
 ```
@@ -65,6 +81,22 @@ open dist/Uficast.app
 Opening the app shows the launcher immediately. Its gear button opens Settings; **Cmd+,** and **Cmd+P** also open Settings. The menu bar includes the native calendar, **Open Launcher**, **Settings…**, **Date & Time…**, **Keep Awake** and **Quit**. **Retry Shortcut** and application refresh are available in General. The global shortcut uses Carbon registration and never requests Accessibility or Input Monitoring. To use another launcher shortcut, open **General → Launcher**, click **Shortcut** and press the new combination (it must include Command, Control or Option); **Reset** restores Cmd+Space. A combination Uficast cannot register is not saved. Release conflicting shortcuts in Spotlight/Raycast yourself; Uficast does not change their settings. A successful registration does not prove a system shortcut yields the chord.
 
 Build output is `dist/Uficast.app`, locally ad-hoc signed. `scripts/build.sh debug` builds a debug bundle. Optionally set `UFICAST_SIGN_IDENTITY` to an existing signing identity. Quit the running copy before rebuilding or replacing it. Opening a rebuilt bundle while an older copy is still running reveals that existing process; it does not reload its executable. For an isolated build, set `UFICAST_OUTPUT_ROOT` to another output directory. Script Automation consent may need renewal after ad-hoc rebuilds; a stable installation path is recommended.
+
+To update an existing checkout, build separately before quitting the running app:
+
+```sh
+git pull --ff-only origin main
+UFICAST_OUTPUT_ROOT="$PWD/.build/staging" scripts/build.sh
+```
+
+Choose **Quit** in Uficast so it saves the remembered Keep Awake session. Then replace and reopen the bundle at its existing location (the default is shown here):
+
+```sh
+ditto .build/staging/Uficast.app dist/Uficast.app
+open dist/Uficast.app
+```
+
+Optional, git-ignored `local/build.env` is sourced by `build.sh` and can override the output path or signing identity; account for those overrides when staging or installing. On the current Swift 6.2.3 toolchain, all 136 release tests pass, while the debug GitHub CLI fixture aborts with `freed pointer was not the last allocation`. Use the release test command above; investigation of the debug-only failure remains open. Environments that block SwiftPM's nested sandbox can run `scripts/test.sh -c release --disable-sandbox`.
 
 Read-only diagnostics (no registration or permission prompts):
 
@@ -78,7 +110,7 @@ Application discovery uses `/Applications`, `/System/Applications` and `~/Applic
 
 ## Keyboard shortcuts
 
-These shortcuts work while Uficast has keyboard focus; only the launcher shortcut and assigned app hotkeys are global.
+These shortcuts work while Uficast has keyboard focus. The launcher shortcut, assigned app hotkeys and configured AI clipboard shortcuts are global.
 
 | Shortcut | Action |
 | --- | --- |
@@ -100,7 +132,7 @@ Apple's [standard Mac shortcuts](https://support.apple.com/en-us/102650) use Cmd
 
 **Settings → General** fits one window without scrolling: two columns of cards (Launcher, Menu Bar Clock, Power & Keyboard, AI Text, Application Folders, Configuration). Most settings are a single row, and the longer explanations are behind the ⓘ buttons. It scrolls only if the window is made very small.
 
-In **Settings… → Commands**, double-click an **Alias** cell (or the alias in the inspector), type a value and press **Enter** to save. **Escape** cancels without saving; click **×** to remove an assigned alias. Invalid or duplicate aliases keep the draft open and show an error. Enabled controls visibility in launcher search. Exact aliases always outrank name/fuzzy matches; enabled commands cannot share an alias. General starts with **Start Uficast at login** and also contains Menu Bar Calendar, Keep Awake, Caps Lock, application roots, refresh, import/export and backup recovery.
+In **Settings… → Commands**, double-click an **Alias** cell (or the alias in the inspector), type a value and press **Enter** to save. **Escape** cancels without saving; click **×** to remove an assigned alias. Invalid or duplicate aliases keep the draft open and show an error. Enabled controls visibility in launcher search. Exact aliases always outrank name/fuzzy matches; enabled commands cannot share an alias. General includes **Start at login** in the Launcher card, plus clock, Keep Awake, Caps Lock, application folders, refresh, import/export and backup recovery.
 
 In **Settings → Commands**, double-click an application’s **Hotkey** cell (the current shortcut or **Add Hotkey**) to open its inline recorder. A single click only selects the row. **Escape** closes recording without saving and keeps the previous shortcut. Click the **×** beside an assigned shortcut to remove it. You can also select an application and click **Record Hotkey** under **Show / Hide**. Press a combination containing Command, Control or Option; Escape cancels and Delete clears it. Enabled app shortcuts must be unique, and the launcher shortcut (Cmd+Space unless changed) is reserved. The table shows assigned shortcuts and registration errors. If another app claims a chord, release it there first. Script-specific global hotkeys remain deferred.
 
@@ -132,6 +164,12 @@ Install the [GitHub CLI](https://cli.github.com/) and sign in once (`brew instal
 
 The list is loaded by running `gh` the first time, kept in memory for 5 minutes and then loaded again on the next entry; a failure is shown in the launcher and re-entering the mode retries. Limits: the 100 newest open pull requests, `gh`'s default host only (a `GH_HOST` set in a terminal profile is not seen by a GUI app), and `gh` must be on the app's `PATH` or in `/opt/homebrew/bin`, `/usr/local/bin` or the system directories (a `gh` that only a terminal profile adds, such as `~/.local/bin`, counts as not installed). Pull requests in organizations that require SSO authorization of the `gh` token may be missing. No new permission is requested.
 
+## Calculator
+
+Type an expression such as `24*3+10`, `(5+5)*2` or `200+10%`. The live result appears first; **Enter** copies it and closes the launcher. Supported operations are `+ - * / ^ %`, parentheses and dot/comma decimals, including `× ÷ −`. Functions, units and currencies are outside the current scope. Incomplete or invalid expressions show no result; ambiguous grouping such as `1,000` is rejected.
+
+The last 50 distinct calculations are remembered locally. Start a formula or type `calc` to see up to six history suggestions: **Enter** copies a result and **Tab** brings its expression into the field. An unfinished formula is restored and selected on reopen. History and the draft are separate from configuration export.
+
 ## AI text
 
 **General → AI Text** holds the command, two clipboard shortcuts and buttons that create Shortcuts. The default command is:
@@ -161,6 +199,10 @@ mkdir -p .build/previews
 dist/Uficast.app/Contents/MacOS/Uficast --preview-launcher .build/previews/launcher.png
 dist/Uficast.app/Contents/MacOS/Uficast --preview-launcher .build/previews/argument.png --argument
 dist/Uficast.app/Contents/MacOS/Uficast --preview-settings .build/previews/settings.png
+dist/Uficast.app/Contents/MacOS/Uficast --preview-settings .build/previews/general.png --general
+dist/Uficast.app/Contents/MacOS/Uficast --preview-launcher .build/previews/calculator.png --calculation
+dist/Uficast.app/Contents/MacOS/Uficast --preview-launcher .build/previews/pull-requests.png --pull-requests
+dist/Uficast.app/Contents/MacOS/Uficast --preview-ai-text .build/previews/ai-text.png --dark
 ```
 
 Regenerate the README images from these public fixtures:
@@ -171,7 +213,7 @@ scripts/screenshots.sh
 # scripts/screenshots.sh .build/readme-app/Uficast.app
 ```
 
-The preview path does not construct AppController, load personal configuration, register hotkeys, run scripts or change keyboard/login/power settings. It loads icons only from the fixed standard-app paths. Previews verify layout; desktop keyboard delivery, focus, paste and browser behavior require the manual checklist.
+The preview path does not construct AppController, load personal configuration, register hotkeys, run scripts, call `gh`/AI tools or change keyboard/login/power settings. It loads icons only from the fixed standard-app paths. Pull requests use inert example.com URLs, and the AI result is fixed text. Previews verify layout; desktop keyboard delivery, focus, paste and browser behavior require the manual checklist. Dataset and capture details are in [screenshots/README](docs/screenshots/README.md).
 
 ## Caps Lock and multiple keyboards
 
