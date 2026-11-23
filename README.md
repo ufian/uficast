@@ -11,6 +11,7 @@ Uficast includes a Day-O-style clock and native calendar in its single menu-bar 
 - **Cmd+Space launcher** (or another shortcut you choose) with application icons, fuzzy search and aliases that rank first. It opens on the display of the window you are working in.
 - **Wrong-layout search** for U.S./Russian keyboards: type `сркщьу` to find Chrome without changing layouts.
 - **Calculator**: type a formula such as `24*3+10` or `200+10%` and Enter copies the result. Past calculations appear below as you type or after `calc`, and an unfinished formula is still there when you reopen the launcher.
+- **GitHub pull requests**: type `gh`, press Tab, type to filter your open pull requests by title, and press Enter to open one in the browser. It uses the GitHub CLI (`gh`) that is already installed and signed in; Uficast stores no GitHub credentials and no pull request data.
 - **Script folders** to discover local shell, Python and AppleScript commands, including Raycast title/argument headers.
 - **Local scripts** using shell, AppleScript or another configured interpreter. Pass one unchanged text argument and optionally open a generated URL.
 - **Per-app shortcuts** to show, hide or launch an application.
@@ -73,7 +74,7 @@ dist/Uficast.app/Contents/MacOS/Uficast --diagnostics
 
 See [manual verification](docs/MANUAL_TESTS.md). Pure tests and signing checks do not prove real desktop shortcut delivery.
 
-Application discovery uses `/Applications`, `/System/Applications` and `~/Applications`. Use **Refresh Applications** after installing an app; default root changes are also observed. Search supports fuzzy abbreviations and U.S./Russian physical-key alternatives (for example `сркщьу` finds Chrome). Script arguments are never converted. Use Up/Down selection and Enter to launch/activate. Usage ordering is currently in memory. `--catalog-summary` prints a read-only discovery count/timing without launching apps.
+Application discovery uses `/Applications`, `/System/Applications` and `~/Applications`. Use **Refresh Applications** after installing an app; default root changes are also observed. Search supports fuzzy abbreviations and U.S./Russian physical-key alternatives (for example `сркщьу` finds Chrome). Script arguments are never converted. Use Up/Down selection and Enter to launch/activate. Applications and commands you use most come first in the empty search and win ties between equal matches; the counts are remembered locally across restarts (identifiers, counts and dates only). `--catalog-summary` prints a read-only discovery count/timing without launching apps.
 
 ## Keyboard shortcuts
 
@@ -96,6 +97,8 @@ These shortcuts work while Uficast has keyboard focus; only the launcher shortcu
 Apple's [standard Mac shortcuts](https://support.apple.com/en-us/102650) use Cmd+, for Settings and Cmd+P for printing. Cmd+P is an owner-requested additional Settings shortcut in Uficast; this app has no print command. Active shortcut recording takes priority over menu shortcuts.
 
 ## Settings and aliases
+
+**Settings → General** fits one window without scrolling: two columns of cards (Launcher, Menu Bar Clock, Power & Keyboard, AI Text, Application Folders, Configuration). Most settings are a single row, and the longer explanations are behind the ⓘ buttons. It scrolls only if the window is made very small.
 
 In **Settings… → Commands**, double-click an **Alias** cell (or the alias in the inspector), type a value and press **Enter** to save. **Escape** cancels without saving; click **×** to remove an assigned alias. Invalid or duplicate aliases keep the draft open and show an error. Enabled controls visibility in launcher search. Exact aliases always outrank name/fuzzy matches; enabled commands cannot share an alias. General starts with **Start Uficast at login** and also contains Menu Bar Calendar, Keep Awake, Caps Lock, application roots, refresh, import/export and backup recovery.
 
@@ -121,11 +124,17 @@ Default result handling runs for side effects and ignores stdout (the script can
 
 While a script runs, the launcher stays open with a running status. Success closes it; failure shows the exit/timeout error in the lower section, preferring stderr and falling back to stdout. **Edit Input** restores the exact submitted argument for correction; only an explicit Enter retries. The latest failure and argument stay in memory only. Hiding the launcher for any reason clears its error and remembered input. A late result cannot bring that error back or replace newer input. Each deliberate reopen starts clean.
 
-General → Recent Runs shows active commands, Cancel controls and the ten most recent outcomes in memory. Each command can run once concurrently; different commands can overlap. Output capture is bounded to 1 MiB per stream while both pipes continue draining. Normal quit cancels managed process groups; deliberately detached daemons and force-quit/crash cleanup are outside that guarantee. AppleScript controlling other applications may need **Automation** consent; scripts depending on Accessibility are unsupported under the no-Accessibility requirement.
+The **Recent Runs** button in the Settings footer shows active commands, Cancel controls and the ten most recent outcomes in memory. Each command can run once concurrently; different commands can overlap. Output capture is bounded to 1 MiB per stream while both pipes continue draining. Normal quit cancels managed process groups; deliberately detached daemons and force-quit/crash cleanup are outside that guarantee. AppleScript controlling other applications may need **Automation** consent; scripts depending on Accessibility are unsupported under the no-Accessibility requirement.
+
+## GitHub pull requests
+
+Install the [GitHub CLI](https://cli.github.com/) and sign in once (`brew install gh`, then `gh auth login`). In the launcher, type `gh` and press Tab (or Enter): Uficast lists your open pull requests across all repositories, newest first (each row shows the title over the full width with `org/repo #412` below it). Type to filter by title, use Up/Down to select and press Enter to open the pull request in your default browser. Esc, or Backspace in an empty filter, returns to the normal search. Typing `gh` ranks the command first (the alias matches exactly); `g` alone does not match it by alias (it may still appear among the matches by its name, ordered by how often you use each entry). An alias `gh` that you define yourself wins over the built-in command.
+
+The list is loaded by running `gh` the first time, kept in memory for 5 minutes and then loaded again on the next entry; a failure is shown in the launcher and re-entering the mode retries. Limits: the 100 newest open pull requests, `gh`'s default host only (a `GH_HOST` set in a terminal profile is not seen by a GUI app), and `gh` must be on the app's `PATH` or in `/opt/homebrew/bin`, `/usr/local/bin` or the system directories (a `gh` that only a terminal profile adds, such as `~/.local/bin`, counts as not installed). Pull requests in organizations that require SSO authorization of the `gh` token may be missing. No new permission is requested.
 
 ## AI text
 
-**General → AI Text** holds the command and two clipboard shortcuts. The default command is:
+**General → AI Text** holds the command, two clipboard shortcuts and buttons that create Shortcuts. The default command is:
 
 ```sh
 claude -p --model claude-haiku-5-5 --tools "" --strict-mcp-config --disable-slash-commands --no-session-persistence --setting-sources project,local
@@ -134,8 +143,10 @@ claude -p --model claude-haiku-5-5 --tools "" --strict-mcp-config --disable-slas
 The command gets the prompt on stdin and must print only the answer. You can change the model or use another CLI. It runs in your login shell from an empty private folder. The selected text never becomes part of the command line.
 
 - **Clipboard.** Copy text, press **Rewrite from clipboard** or **Translate from clipboard**, and check the result. **Enter** copies it for Cmd+V and **Esc** cancels. This works in any app.
-- **Services.** Select text and choose **Rewrite with Uficast** or **Translate with Uficast** from the Services menu. Assign their shortcuts in System Settings → Keyboard → Keyboard Shortcuts → Services. **Enter** replaces the selection and also copies the result.
-  - macOS offers these Services only where the selection can be edited. Some Electron apps and terminals do not support them; use the clipboard there.
+- **Shortcuts.** **Create Rewrite Shortcut** and **Create Translate Shortcut** open a new shortcut in the Shortcuts app, copy a one-line script to the clipboard and list the remaining steps in Settings: name it, use it as a Quick Action, receive Text with Get Clipboard as the fallback, add **Run Shell Script** (input on stdin) with the script, and assign a keyboard shortcut. Use a combination with ⌃⌘⇧ (for example ⌃⌘⇧R): a simpler one may already belong to another app and then silently does nothing. Shortcuts refuses to import generated files ("Importing unsigned shortcut files is not supported"), so the shortcut is built by hand.
+  - It takes the selected text where the app offers it as a Quick Action (the Services menu), otherwise the clipboard, and opens `uficast://rewrite?text=…` (or `translate`). The result appears in Uficast and **Enter** copies it; nothing replaces the selection.
+  - Some apps, such as many Electron apps and terminals, do not offer their selection, so the clipboard is used there.
+  - Any app or web page can open a `uficast://` link. It only starts a request and shows the result; nothing is copied until you press Enter. Text over 20,000 characters is refused.
 - **Formatting.** Bold, italics, links and other inline styles are carried through the model with markers and restored. If the model breaks them, the result keeps the selection's main style and the panel says so.
 - **Privacy.** The text goes to the program the command runs: Anthropic for `claude`. Uficast stores no text, but that program may keep data under its own settings.
 
@@ -180,7 +191,7 @@ The last caffeine/decaf mode is remembered locally and restored on relaunch. Tim
 
 The clock is Uficast's one menu-bar button. Click it for a compact native calendar, use its arrows to browse months and the dot to return to today. Each opening starts at today. The menu also offers Open Launcher, Settings, macOS Date & Time, Keep Awake and Quit.
 
-In **Settings → General → Menu Bar Calendar**, edit **Date & Time Format** and press Enter or Apply. **Show Icon** controls the calendar/day icon beside the text; the `zzz`/cup power indicator stays visible to its left. The default `EEE HH:mm:ss` shows weekday and 24-hour time; `E h:mm:ss a` uses 12-hour time. A preview updates while you edit. Disabling date/time restores the cup/zzz button.
+In **Settings → General → Menu Bar Clock**, edit the date format and press Enter or Apply. **Show icon** controls the calendar/day icon beside the text; the `zzz`/cup power indicator stays visible to its left. The default `EEE HH:mm:ss` shows weekday and 24-hour time; `E h:mm:ss a` uses 12-hour time. A preview updates while you edit. Disabling date/time restores the cup/zzz button.
 
 Seconds are scheduled at system-second boundaries, including during menu tracking, and resynchronize after wake or time-zone/clock changes. Calendar browsing uses AppKit NSDatePicker; it does not read calendar events/accounts.
 
@@ -193,7 +204,7 @@ dist/Uficast.app/Contents/MacOS/Uficast --preview-calendar /tmp/uficast-calendar
 
 ## Start at login
 
-The checkbox is at the top of **Settings → General**. macOS may require approval in **Login Items**; Uficast shows the actual registered/pending/disabled state. Keep the app at a stable path and recheck registration after moving it. A checked box alone is not evidence of a successful relogin test.
+The **Start at login** checkbox is in the **Launcher** card of **Settings → General**. macOS may require approval in **Login Items**; Uficast shows the actual registered/pending/disabled state. Keep the app at a stable path and recheck registration after moving it. A checked box alone is not evidence of a successful relogin test.
 
 ## Native icon regression check
 

@@ -47,6 +47,8 @@ final class SettingsModel: ObservableObject {
     var onSetLauncherHotkey: ((GlobalShortcut?) -> Void)?
     var onSetAICommand: ((String) -> Void)?
     var onSetAIHotkey: ((AITextAction, GlobalShortcut?) -> Void)?
+    var onCreateShortcut: ((AITextAction) -> Void)?
+    @Published var shortcutGuide: AITextAction?
     @Published var aiHotkeyErrors: [AITextAction: String] = [:]
     var onBeginShortcutRecording: (() -> Void)?
     var onEndShortcutRecording: (() -> Void)?
@@ -120,10 +122,10 @@ final class SettingsModel: ObservableObject {
 @MainActor
 final class SettingsWindowController: NSWindowController {
     init(model: SettingsModel) {
-        let window = SettingsWindow(contentRect: NSRect(x: 0, y: 0, width: 980, height: 680),
+        let window = SettingsWindow(contentRect: NSRect(x: 0, y: 0, width: 980, height: 640),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "Uficast Settings"
-        window.minSize = NSSize(width: 800, height: 580)
+        window.minSize = NSSize(width: 820, height: 540)
         window.isReleasedWhenClosed = false
         window.contentView = NSHostingView(rootView: SettingsView(model: model))
         super.init(window: window)
@@ -148,25 +150,30 @@ private struct SettingsView: View {
     @ObservedObject var model: SettingsModel
     @StateObject private var icons = IconStore()
     @State private var roots = ""
+    @State private var showRuns = false
     @FocusState private var searchFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 32) {
+            HStack(spacing: 8) {
                 sectionButton("General", icon: "gearshape")
                 sectionButton("Commands", icon: "square.grid.2x2")
             }
-            .padding(.vertical, 18)
+            .padding(.vertical, 8)
             .frame(maxWidth: .infinity)
             .background(.bar)
             Divider()
             if model.section == "General" { general } else { commands }
             Divider()
-            HStack {
+            HStack(spacing: 8) {
                 if model.isBusy { ProgressView().controlSize(.small) }
-                Text(model.status).font(.caption).textSelection(.enabled)
+                Text(model.status).font(.caption).lineLimit(1).truncationMode(.tail)
+                    .help(model.status).textSelection(.enabled)
                 Spacer()
-            }.padding(12)
+                Button { showRuns.toggle() } label: { Label("Recent Runs", systemImage: "clock.arrow.circlepath") }
+                    .controlSize(.small)
+                    .popover(isPresented: $showRuns, arrowEdge: .top) { recentRuns }
+            }.padding(.horizontal, 16).padding(.vertical, 9)
         }
         .onAppear { loadDrafts() }
         .background(Color(nsColor: .windowBackgroundColor))
@@ -176,12 +183,14 @@ private struct SettingsView: View {
 
     private func sectionButton(_ title: String, icon: String) -> some View {
         Button { model.section = title } label: {
-            VStack(spacing: 6) {
-                Image(systemName: icon).font(.system(size: 25))
-                Text(title).font(.system(size: 14, weight: .semibold))
+            HStack(spacing: 6) {
+                Image(systemName: icon).font(.system(size: 14))
+                Text(title).font(.system(size: 13, weight: .semibold))
             }
-            .frame(width: 110, height: 62)
-            .background(model.section == title ? Color.primary.opacity(0.06) : .clear, in: RoundedRectangle(cornerRadius: 14))
+            .padding(.horizontal, 14)
+            .frame(height: 30)
+            .background(model.section == title ? Color.primary.opacity(0.09) : .clear, in: Capsule())
+            .contentShape(Capsule())
         }.buttonStyle(.plain)
     }
 
@@ -318,101 +327,143 @@ private struct SettingsView: View {
         }.disabled(model.isBusy || model.isReadOnly)
     }
 
+    /// Two columns of cards that fit the window; it only scrolls if the window is made very small.
     private var general: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                Text("Startup").font(.title2.bold())
-                Toggle("Start Uficast at login", isOn: Binding(get: { model.loginItemRegistered }, set: { model.onSetLoginItem?($0) }))
-                    .disabled(model.isLoginItemBusy)
-                Text(model.loginItemStatus).font(.caption).foregroundStyle(.secondary)
-                Button("Login Items…") { LoginItemService.openSettings() }
-                Divider()
+        ViewThatFits(in: .vertical) {
+            generalColumns
+            ScrollView { generalColumns }
+        }
+    }
+
+    private var generalColumns: some View {
+        HStack(alignment: .top, spacing: 14) {
+            VStack(spacing: 14) {
+                launcherCard
                 MenuBarClockSettings(model: model)
-                Divider()
-                Text("Launcher").font(.title2.bold())
+                powerCard
+            }.frame(maxWidth: .infinity)
+            VStack(spacing: 14) {
+                AITextSettings(model: model)
+                foldersCard
+                configurationCard
+            }.frame(maxWidth: .infinity)
+        }.padding(16)
+    }
+
+    private var launcherCard: some View {
+        SettingsCard(title: "Launcher", systemImage: "command") {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack {
+                    Toggle("Start at login", isOn: Binding(get: { model.loginItemRegistered }, set: { model.onSetLoginItem?($0) }))
+                        .disabled(model.isLoginItemBusy).help(model.loginItemStatus)
+                    Spacer()
+                    Button("Login Items…") { LoginItemService.openSettings() }
+                }
+                if !model.loginItemStatus.hasPrefix("Start at login is") {
+                    Text(model.loginItemStatus).font(.caption).foregroundStyle(.orange)
+                }
+                Divider()
+                HStack(spacing: 8) {
                     Text("Shortcut")
                     ShortcutRecorder(shortcut: model.configuration.effectiveLauncherHotkey,
                         accessibilityName: "Record launcher shortcut",
                         onCapture: { model.onSetLauncherHotkey?($0) },
                         onBegin: { model.onBeginShortcutRecording?() },
                         onEnd: { model.onEndShortcutRecording?() })
-                        .frame(width: 180)
+                        .frame(width: 150)
                     if model.configuration.launcherHotkey != nil {
-                        Button("Reset to \(GlobalShortcut.launcher.display)") { model.onSetLauncherHotkey?(nil) }
+                        Button { model.onSetLauncherHotkey?(nil) } label: { Image(systemName: "arrow.counterclockwise") }
+                            .help("Reset to \(GlobalShortcut.launcher.display)")
+                            .accessibilityLabel("Reset launcher shortcut to \(GlobalShortcut.launcher.display)")
                     }
+                    Spacer()
+                    Menu {
+                        Button("Retry Registration") { model.onRetryShortcut?() }
+                        Button("Open Keyboard Shortcuts…") {
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.keyboard?Shortcuts") { NSWorkspace.shared.open(url) }
+                        }
+                    } label: { Image(systemName: "ellipsis.circle") }
+                        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help("Shortcut actions")
+                    InfoButton(text: "Click the field, then press a new shortcut with ⌘, ⌃ or ⌥. Escape cancels; Delete restores \(GlobalShortcut.launcher.display). Left and right modifier keys both work.\n\nIf Spotlight or Raycast uses the same shortcut, release it in their settings; Uficast does not change those assignments. No Accessibility or Input Monitoring access is required.")
                 }.disabled(model.isBusy || model.isReadOnly)
-                Text("Click, then press a new shortcut with ⌘, ⌃ or ⌥. Escape cancels; Delete restores \(GlobalShortcut.launcher.display). Left and right modifier keys both work.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Text("No Accessibility or Input Monitoring access is required.").foregroundStyle(.secondary)
-                Text(model.shortcutStatus).font(.callout)
-                HStack {
-                    Button("Retry Shortcut") { model.onRetryShortcut?() }
-                    Button("Keyboard Shortcuts…") {
-                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.keyboard?Shortcuts") { NSWorkspace.shared.open(url) }
-                    }
-                }
-                Text("If Spotlight or Raycast uses the same shortcut, release it in their settings. Uficast does not change those assignments.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Divider()
-                AITextSettings(model: model)
-                Divider()
-                Text("Keep Awake").font(.title2.bold())
-                Toggle("Keep Mac awake", isOn: Binding(get: { model.keepAwakeActive }, set: { model.onSetKeepAwake?($0) }))
-                    .disabled(model.isKeepAwakeBusy)
-                Text(model.keepAwakeStatus).font(.callout)
-                Text("Keeps the display and Mac awake while active. Remembers the last mode on relaunch; timed sessions keep their original end time.")
-                    .font(.caption).foregroundStyle(.secondary)
-                HStack {
-                    Button("30 Minutes") { model.onKeepAwakeFor?(1800) }
-                    Button("1 Hour") { model.onKeepAwakeFor?(3600) }
-                    Button("Until Stopped") { model.onSetKeepAwake?(true) }
+                Text(model.shortcutStatus).font(.caption).foregroundStyle(.secondary).lineLimit(2).help(model.shortcutStatus)
+            }
+        }
+    }
+
+    private var powerCard: some View {
+        SettingsCard(title: "Power & Keyboard", systemImage: "bolt.fill") {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Toggle("Keep Mac awake", isOn: Binding(get: { model.keepAwakeActive }, set: { model.onSetKeepAwake?($0) }))
+                    Spacer()
+                    Button("30 min") { model.onKeepAwakeFor?(1800) }
+                    Button("1 hour") { model.onKeepAwakeFor?(3600) }
+                    Button("Until stopped") { model.onSetKeepAwake?(true) }
+                    InfoButton(text: "Keeps the display and Mac awake while active. Remembers the last mode on relaunch; timed sessions keep their original end time.")
                 }.disabled(model.isKeepAwakeBusy)
+                Text(model.keepAwakeStatus).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 Divider()
-                Text("Keyboard").font(.title2.bold())
-                Toggle("Map Caps Lock to F19", isOn: Binding(get: { model.configuration.capsLockToF19Enabled }, set: { model.onSetCapsLock?($0) }))
-                    .disabled(model.isBusy || model.isReadOnly || model.isKeyboardBusy)
-                Text(model.keyboardStatus).font(.callout)
-                Text("For each keyboard, set Caps Lock to Caps Lock in Modifier Keys first. Then assign F19 in Input Sources. Keep Uficast running; quitting restores its mapping.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Button("Check Current Mapping") { model.onCheckKeyboard?() }.disabled(model.isKeyboardBusy)
-                Divider()
-                Text("Application Folders").font(.title2.bold())
-                Text("One folder or application path per line. Paths may start with ~/.").foregroundStyle(.secondary)
-                TextEditor(text: $roots).font(.system(.body, design: .monospaced)).frame(height: 100)
-                    .border(.quaternary)
-                HStack {
+                HStack(spacing: 8) {
+                    Toggle("Map Caps Lock to F19", isOn: Binding(get: { model.configuration.capsLockToF19Enabled }, set: { model.onSetCapsLock?($0) }))
+                        .disabled(model.isBusy || model.isReadOnly || model.isKeyboardBusy)
+                    Spacer()
+                    Button("Check Mapping") { model.onCheckKeyboard?() }.disabled(model.isKeyboardBusy)
+                    InfoButton(text: "For each keyboard, set Caps Lock to Caps Lock in Modifier Keys first. Then assign F19 in Input Sources. Keep Uficast running; quitting restores its mapping.")
+                }
+                Text(model.keyboardStatus).font(.caption).foregroundStyle(.secondary).lineLimit(2).help(model.keyboardStatus)
+            }
+        }
+    }
+
+    private var foldersCard: some View {
+        SettingsCard(title: "Application Folders", systemImage: "folder") {
+            VStack(alignment: .leading, spacing: 8) {
+                TextEditor(text: $roots).font(.system(.callout, design: .monospaced))
+                    .scrollContentBackground(.hidden).padding(4).frame(height: 62)
+                    .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                HStack(spacing: 8) {
                     Button("Save Folders") {
                         var config = model.configuration
                         config.applicationRoots = roots.components(separatedBy: .newlines).filter { !$0.isEmpty }
                         model.onSave?(config)
                     }.disabled(model.isBusy || model.isReadOnly)
                     Button("Refresh Applications") { model.onRefresh?() }
+                    Spacer()
+                    InfoButton(text: "One folder or application path per line. Paths may start with ~/.")
                 }
-                Divider()
-                Text("Configuration").font(.title2.bold())
-                Text("Stored locally in ~/Library/Application Support/Uficast. Imports retain file paths; missing files must be located on this Mac.")
-                    .font(.caption).foregroundStyle(.secondary)
-                HStack {
-                    Button("Import…") { model.onImport?() }.disabled(model.isReadOnly)
-                    Button("Export…") { model.onExport?() }
-                    Button("Restore Backup") { model.onRestore?() }
-                }.disabled(model.isBusy)
-                Divider()
-                Text("Recent Runs").font(.title2.bold())
-                Text(model.lastActionStatus).font(.caption).textSelection(.enabled)
-                ForEach(model.activeScripts.keys.sorted(), id: \.self) { id in
-                    HStack {
-                        Text("Running: \(model.activeScripts[id] ?? "Script")")
-                        Button("Cancel") { model.onCancelScript?(id) }
-                    }
-                }
-                if model.recentRuns.isEmpty { Text("No runs yet.").foregroundStyle(.secondary) }
-                ForEach(Array(model.recentRuns.enumerated()), id: \.offset) { _, run in
-                    Text(run).font(.caption).textSelection(.enabled)
-                }
-            }.padding(28).frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
+    }
+
+    private var configurationCard: some View {
+        SettingsCard(title: "Configuration", systemImage: "externaldrive") {
+            HStack(spacing: 8) {
+                Button("Import…") { model.onImport?() }.disabled(model.isReadOnly)
+                Button("Export…") { model.onExport?() }
+                Button("Restore Backup") { model.onRestore?() }
+                Spacer()
+                InfoButton(text: "Stored locally in ~/Library/Application Support/Uficast. Imports retain file paths; missing files must be located on this Mac.")
+            }.disabled(model.isBusy)
+        }
+    }
+
+    private var recentRuns: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Recent Runs").font(.headline)
+            Text(model.lastActionStatus).font(.caption).textSelection(.enabled)
+            ForEach(model.activeScripts.keys.sorted(), id: \.self) { id in
+                HStack {
+                    Text("Running: \(model.activeScripts[id] ?? "Script")")
+                    Button("Cancel") { model.onCancelScript?(id) }
+                }
+            }
+            if model.recentRuns.isEmpty { Text("No runs yet.").foregroundStyle(.secondary) }
+            ForEach(Array(model.recentRuns.enumerated()), id: \.offset) { _, run in
+                Text(run).font(.caption).textSelection(.enabled).lineLimit(3)
+            }
+        }
+        .padding(14).frame(width: 440, alignment: .leading)
     }
 
     private func loadDrafts() {

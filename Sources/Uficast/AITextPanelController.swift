@@ -24,12 +24,13 @@ private final class AIResultTextView: NSTextView {
 /// launcher but keeps its own state, so launcher runs and AI requests never mix.
 @MainActor
 final class AITextPanelController: NSObject, NSWindowDelegate {
-    enum Mode { case replace, copy }
     private enum State { case hidden, working, result, failure, message }
 
     var onConfirm: ((NSAttributedString) -> Void)?
     var onCancel: (() -> Void)?
     var onRetry: (() -> Void)?
+    /// Called when the panel closes because it lost key status while a request was shown.
+    var onLostFocus: (() -> Void)?
     /// Verification turns this off so checks never put a window on screen.
     var presentsWindow = true
 
@@ -40,7 +41,6 @@ final class AITextPanelController: NSObject, NSWindowDelegate {
     private let hintLabel = NSTextField(labelWithString: "")
     private let spinner = NSProgressIndicator()
     private var state = State.hidden
-    private var mode = Mode.copy
     private var result = NSAttributedString()
 
     var isVisible: Bool { state != .hidden }
@@ -50,7 +50,7 @@ final class AITextPanelController: NSObject, NSWindowDelegate {
     var shownText: String { textView.string }
 
     override init() {
-        panel = AITextPanel(contentRect: NSRect(x: 0, y: 0, width: 720, height: 340),
+        panel = AITextPanel(contentRect: NSRect(x: 0, y: 0, width: 760, height: 420),
                             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
         super.init()
         panel.delegate = self
@@ -120,8 +120,7 @@ final class AITextPanelController: NSObject, NSWindowDelegate {
         ])
     }
 
-    func showWorking(action: AITextAction, mode: Mode) {
-        self.mode = mode
+    func showWorking(action: AITextAction) {
         result = NSAttributedString()
         titleLabel.stringValue = action.title
         display(.working, text: NSAttributedString(string: "Working…", attributes: secondaryText), note: "",
@@ -135,19 +134,13 @@ final class AITextPanelController: NSObject, NSWindowDelegate {
     }
 
     func showFailure(_ message: String) {
-        display(.failure, text: NSAttributedString(string: message, attributes: [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: NSColor.systemRed]),
+        display(.failure, text: NSAttributedString(string: message, attributes: [.font: Self.resultFont(), .foregroundColor: NSColor.systemRed]),
                 note: "", hint: "↩ Retry  ·  Esc Close")
     }
 
     func showMessage(_ message: String) {
         titleLabel.stringValue = "Uficast"
         display(.message, text: NSAttributedString(string: message, attributes: secondaryText), note: "", hint: "Esc Close")
-    }
-
-    func switchToCopyMode(note: String) {
-        mode = .copy
-        noteLabel.stringValue = note
-        if state == .result { hintLabel.stringValue = resultHint }
     }
 
     func performConfirm() {
@@ -167,11 +160,14 @@ final class AITextPanelController: NSObject, NSWindowDelegate {
 
     func dismiss() { hide() }
 
-    func windowDidResignKey(_ notification: Notification) { performCancel() }
+    func windowDidResignKey(_ notification: Notification) {
+        if state != .hidden { onLostFocus?() }
+        performCancel()
+    }
 
-    private var resultHint: String { mode == .replace ? "↩ Replace  ·  Esc Cancel" : "↩ Copy  ·  Esc Cancel" }
+    private let resultHint = "↩ Copy  ·  Esc Cancel"
     private var secondaryText: [NSAttributedString.Key: Any] {
-        [.font: NSFont.systemFont(ofSize: 15), .foregroundColor: NSColor.secondaryLabelColor]
+        [.font: Self.resultFont(), .foregroundColor: NSColor.secondaryLabelColor]
     }
 
     private func display(_ state: State, text: NSAttributedString, note: String, hint: String) {
@@ -197,13 +193,33 @@ final class AITextPanelController: NSObject, NSWindowDelegate {
     }
 
     /// Source text colors can be unreadable on the panel's material; the copy that is
-    /// shown drops them, while the inserted or copied result keeps every attribute.
+    /// shown drops them, while the copied result keeps every attribute.
     private static func displayCopy(_ text: NSAttributedString) -> NSAttributedString {
         let copy = NSMutableAttributedString(attributedString: text)
         let range = NSRange(location: 0, length: copy.length)
         copy.removeAttribute(.foregroundColor, range: range)
         copy.removeAttribute(.backgroundColor, range: range)
         copy.addAttribute(.foregroundColor, value: NSColor.labelColor, range: range)
+        // Show the result like the terminal does: the iTerm font at its natural line height.
+        // Source fonts only contribute bold/italic; source paragraph styles are dropped.
+        copy.removeAttribute(.paragraphStyle, range: range)
+        copy.addAttribute(.paragraphStyle, value: NSParagraphStyle.default, range: range)
+        copy.enumerateAttribute(.font, in: range) { value, runRange, _ in
+            let traits = (value as? NSFont)?.fontDescriptor.symbolicTraits ?? []
+            copy.addAttribute(.font, value: resultFont(traits: traits), range: runRange)
+        }
         return copy
+    }
+
+    /// Same family and size as the owner's iTerm profile (Meslo LG S NF Mono, 16 pt,
+    /// vertical spacing 1.0); falls back to the system monospaced font when it is missing.
+    static let resultFontSize: CGFloat = 16
+    static func resultFont(traits: NSFontDescriptor.SymbolicTraits = []) -> NSFont {
+        let wanted = traits.intersection([.bold, .italic])
+        let suffix = wanted == [.bold, .italic] ? "BoldItalic" : wanted == .bold ? "Bold" : wanted == .italic ? "Italic" : "Regular"
+        if let font = NSFont(name: "MesloLGSNFM-\(suffix)", size: resultFontSize) { return font }
+        let base = NSFont.monospacedSystemFont(ofSize: resultFontSize, weight: .regular)
+        guard !wanted.isEmpty else { return base }
+        return NSFont(descriptor: base.fontDescriptor.withSymbolicTraits(wanted), size: resultFontSize) ?? base
     }
 }

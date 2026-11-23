@@ -1,8 +1,9 @@
 import AppKit
+import Carbon.HIToolbox
 import UficastCore
 
 /// Development-only native checks for AI text. Uses private pasteboards and fakes;
-/// never runs a real AI command, reads the general clipboard or registers services.
+/// never runs a real AI command or reads the general clipboard.
 @MainActor
 enum AITextVerification {
     static func run() throws {
@@ -10,6 +11,35 @@ enum AITextVerification {
         try panelControls()
         try coordinatorFlows()
         try reviewRegressions()
+        try hotkeyDelivery()
+    }
+
+    /// A registered AI shortcut must reach `onAIAction`, press by press. The Carbon event is
+    /// sent to the application target, so no key is typed and no privacy grant is involved.
+    private static func hotkeyDelivery() throws {
+        let service = HotkeyService()
+        defer { service.stop() }
+        let rewrite = GlobalShortcut(keyCode: 79, modifiers: GlobalShortcut.control | GlobalShortcut.option | GlobalShortcut.command, keyLabel: "F18")
+        let translate = GlobalShortcut(keyCode: 80, modifiers: GlobalShortcut.control | GlobalShortcut.option | GlobalShortcut.command, keyLabel: "F19")
+        var received: [AITextAction] = []
+        service.onAIAction = { received.append($0) }
+        service.configure(launcher: GlobalShortcut(keyCode: 64, modifiers: GlobalShortcut.control | GlobalShortcut.option | GlobalShortcut.command, keyLabel: "F17"),
+                          ai: [.rewrite: rewrite, .translate: translate], appShortcuts: [:])
+        try require(service.aiErrors.isEmpty, "AI shortcuts were not registered: \(service.aiErrors)")
+        func send(_ kind: Int, id: UInt32) throws {
+            var event: EventRef?
+            try require(CreateEvent(nil, OSType(kEventClassKeyboard), UInt32(kind), 0, EventAttributes(kEventAttributeNone), &event) == noErr, "event")
+            var identity = EventHotKeyID(signature: 0x55464943, id: id)
+            try require(SetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
+                                          MemoryLayout<EventHotKeyID>.size, &identity) == noErr, "parameter")
+            _ = SendEventToEventTarget(event, GetApplicationEventTarget())
+            ReleaseEvent(event)
+        }
+        try send(kEventHotKeyPressed, id: 1000)
+        try send(kEventHotKeyReleased, id: 1000)
+        try send(kEventHotKeyPressed, id: 1001)
+        try send(kEventHotKeyReleased, id: 1001)
+        try require(received == [.rewrite, .translate], "AI shortcut presses were not delivered: \(received)")
     }
 
     private static func require(_ condition: Bool, _ message: String) throws {
@@ -73,15 +103,15 @@ enum AITextVerification {
         panel.onConfirm = { _ in confirms += 1 }
         panel.onCancel = { cancels += 1 }
         panel.onRetry = { retries += 1 }
-        panel.showWorking(action: .rewrite, mode: .replace)
+        panel.showWorking(action: .rewrite)
         try require(panel.hint == "Working…  ·  Esc Cancel" && panel.title == "Rewrite", "Working state")
         panel.performConfirm()
         try require(confirms == 0, "Enter while working must do nothing")
         panel.showResult(sample(), note: nil)
-        try require(panel.hint == "↩ Replace  ·  Esc Cancel", "Replace hint")
+        try require(panel.hint == "↩ Copy  ·  Esc Cancel", "Copy hint")
         panel.performConfirm()
         try require(confirms == 1, "Enter on a result confirms once")
-        panel.showWorking(action: .translate, mode: .copy)
+        panel.showWorking(action: .translate)
         panel.showResult(NSAttributedString(string: "Готово"), note: "Formatting could not be kept.")
         try require(panel.hint == "↩ Copy  ·  Esc Cancel" && panel.note == "Formatting could not be kept.", "Copy hint and note")
         panel.showFailure("Boom")
@@ -92,10 +122,8 @@ enum AITextVerification {
         try require(panel.hint == "Esc Close", "Message hint")
         panel.performConfirm()
         try require(retries == 1 && confirms == 1, "Enter on a message does nothing")
-        panel.showWorking(action: .rewrite, mode: .replace)
+        panel.showWorking(action: .rewrite)
         panel.showResult(sample(), note: nil)
-        panel.switchToCopyMode(note: "Time ran out for replacing.")
-        try require(panel.hint == "↩ Copy  ·  Esc Cancel" && panel.note == "Time ran out for replacing.", "Switch to copy mode")
         panel.performCancel()
         panel.performCancel()
         try require(cancels == 1, "Esc cancels once")
@@ -108,12 +136,14 @@ enum AITextVerification {
         private var generation = 0
         private(set) var calls = 0
         private(set) var cancels = 0
+        private(set) var prompts: [String] = []
         init(_ answers: [Result<String, AITextError>], delay: Duration = .milliseconds(50)) {
             self.answers = answers
             self.delay = delay
         }
         func run(command: String, prompt: String, timeout: Double) async throws -> String {
             calls += 1
+            prompts.append(prompt)
             let started = generation
             let answer = answers.isEmpty ? .success("ok") : answers.removeFirst()
             try? await Task.sleep(for: delay)
@@ -128,27 +158,15 @@ enum AITextVerification {
         while !condition(), Date() < deadline { RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01)) }
     }
 
-    /// Fires `action` from inside the coordinator's nested service loop once `ready` holds.
-    private static func whenReady(_ ready: @escaping @MainActor () -> Bool, _ action: @escaping @MainActor () -> Void) -> Timer {
-        Timer.scheduledTimer(withTimeInterval: 0.02, repeats: true) { timer in
-            let fired = MainActor.assumeIsolated { () -> Bool in
-                guard ready() else { return false }
-                action()
-                return true
-            }
-            if fired { timer.invalidate() }
-        }
-    }
-
-    private static func make(_ runner: FakeRunner, deadline: TimeInterval = 5) -> (AITextCoordinator, AITextPanelController, NSPasteboard) {
+    private static func make(_ runner: FakeRunner) -> (AITextCoordinator, AITextPanelController, NSPasteboard) {
         let panel = AITextPanelController()
         panel.presentsWindow = false
         let general = privatePasteboard()
-        return (AITextCoordinator(panel: panel, runner: runner, general: general, serviceDeadline: deadline, timeout: 5), panel, general)
+        return (AITextCoordinator(panel: panel, runner: runner, general: general, timeout: 5), panel, general)
     }
 
     private static func coordinatorFlows() throws {
-        let replace = "↩ Replace  ·  Esc Cancel", copy = "↩ Copy  ·  Esc Cancel"
+        let copy = "↩ Copy  ·  Esc Cancel"
         do { // Empty clipboard and an image-only clipboard never run the command.
             let runner = FakeRunner([])
             let (coordinator, panel, general) = make(runner)
@@ -197,58 +215,85 @@ enum AITextVerification {
             spin { panel.hint == copy }
             try require(panel.shownText == "second" && Task.awaitValue { await runner.calls } == 2, "Retry runs again")
         }
-        do { // Service with a rich source: Enter replaces with formatting and copies.
-            let (coordinator, panel, general) = make(FakeRunner([.success("Kindly <s1>review</s1> the <s2>file</s2>")]))
-            let service = privatePasteboard()
-            defer { service.releaseGlobally() }
-            RichTextBridge.write(sample(), rich: true, to: service)
-            let timer = whenReady({ panel.hint == replace }) { panel.performConfirm() }
-            var message: NSString = ""
-            coordinator.rewriteText(service, userData: "", error: &message)
-            timer.invalidate()
-            guard let replaced = RichTextBridge.read(service) else { throw ConfigError.invalid("Service got no result") }
-            try require(replaced.string == "Kindly review the file" && isBold(replaced, word: "review"), "Replacement keeps bold")
-            try require(general.string(forType: .string) == "Kindly review the file", "Replacement also copied")
-        }
-        do { // Service cancel leaves the selection unchanged.
-            let (coordinator, panel, _) = make(FakeRunner([.success("never")], delay: .milliseconds(300)))
-            let service = privatePasteboard()
-            defer { service.releaseGlobally() }
-            RichTextBridge.write(NSAttributedString(string: "hello"), rich: false, to: service)
-            let timer = whenReady({ panel.hint == "Working…  ·  Esc Cancel" }) { panel.performCancel() }
-            var message: NSString = ""
-            coordinator.translateText(service, userData: "", error: &message)
-            timer.invalidate()
-            try require(service.string(forType: .string) == "hello", "Cancelled service must not write")
-        }
-        do { // Deadline with a result shown: return without writing, switch to copy mode.
-            let (coordinator, panel, general) = make(FakeRunner([.success("Done.")]), deadline: 0.5)
-            let service = privatePasteboard()
-            defer { service.releaseGlobally() }
+        do { // A link carries its own text: the clipboard is not read, Enter copies plain text.
+            let runner = FakeRunner([.success("We were here.")])
+            let (coordinator, panel, general) = make(runner)
             general.clearContents()
-            RichTextBridge.write(NSAttributedString(string: "done"), rich: false, to: service)
-            let start = Date()
-            var message: NSString = ""
-            coordinator.rewriteText(service, userData: "", error: &message)
-            try require(Date().timeIntervalSince(start) < 1, "Service must return at its deadline")
-            try require(service.string(forType: .string) == "done", "Deadline must not write")
-            try require(panel.hint == copy && panel.note == "Time ran out for replacing.", "Deadline switches to copy mode")
+            general.setString("clipboard text", forType: .string)
+            coordinator.runFromURL(URL(string: "uficast://rewrite?text=we%20was%20here")!)
+            spin { panel.hint == copy }
+            try require(panel.shownText == "We were here.", "Link result shown")
+            let prompts = Task.awaitValue { await runner.prompts }
+            try require(prompts.count == 1 && prompts[0].contains("we was here") && !prompts[0].contains("clipboard text"),
+                        "The link's text, not the clipboard, must be sent")
             panel.performConfirm()
-            try require(general.string(forType: .string) == "Done." && service.string(forType: .string) == "done", "Later Enter only copies")
+            try require(general.string(forType: .string) == "We were here." && general.types?.contains(.rtf) != true && !panel.isVisible,
+                        "Enter copies the link's result as plain text")
+        }
+        do { // A link without text uses the clipboard, like the Shortcut's own fallback.
+            let runner = FakeRunner([.success("Привет")])
+            let (coordinator, panel, general) = make(runner)
+            general.clearContents()
+            general.setString("from clipboard", forType: .string)
+            coordinator.runFromURL(URL(string: "uficast://translate")!)
+            spin { panel.hint == copy }
+            let prompts = Task.awaitValue { await runner.prompts }
+            try require(panel.shownText == "Привет" && prompts.count == 1 && prompts[0].contains("from clipboard"),
+                        "A link without text must use the clipboard")
+        }
+        do { // Overlong text is refused, an unknown link is ignored; neither runs the command.
+            let runner = FakeRunner([])
+            let (coordinator, panel, _) = make(runner)
+            let long = String(repeating: "a", count: AITextURL.maximumTextLength + 1)
+            coordinator.runFromURL(URL(string: "uficast://rewrite?text=\(long)")!)
+            try require(panel.shownText.contains("too long") && panel.hint == "Esc Close", "Overlong text message")
+            panel.dismiss()
+            coordinator.runFromURL(URL(string: "uficast://launch?text=x")!)
+            coordinator.runFromURL(URL(string: "https://rewrite?text=x")!)
+            spin(0.2) { false }
+            try require(!panel.isVisible && Task.awaitValue { await runner.calls } == 0, "Refused links must not run the command")
+        }
+        do { // Diagnostics: a link and a panel closed by lost focus are reported, a confirmed one is not.
+            let runner = FakeRunner([.success("Done.")], delay: .milliseconds(300))
+            let (coordinator, panel, general) = make(runner)
+            var events: [String] = []
+            coordinator.onEvent = { events.append($0) }
+            general.clearContents()
+            coordinator.runFromURL(URL(string: "uficast://rewrite?text=we%20was%20here")!)
+            try require(events == ["Rewrite link received (11 characters)."], "A link must be reported once: \(events)")
+            panel.windowDidResignKey(Notification(name: NSWindow.didResignKeyNotification))
+            try require(events.count == 2 && events[1] == "The result panel closed because it lost focus." && !panel.isVisible,
+                        "Losing focus while working must be reported and close the panel: \(events)")
+            spin(0.6) { false }
+            let confirmed = FakeRunner([.success("Done.")])
+            let (second, secondPanel, _) = make(confirmed)
+            var secondEvents: [String] = []
+            second.onEvent = { secondEvents.append($0) }
+            second.runFromURL(URL(string: "uficast://translate?text=hello")!)
+            spin { secondPanel.hint == copy }
+            secondPanel.performConfirm()
+            secondPanel.windowDidResignKey(Notification(name: NSWindow.didResignKeyNotification))
+            try require(secondEvents == ["Translate link received (5 characters)."], "A confirmed panel must not report lost focus: \(secondEvents)")
+            coordinator.runFromClipboard(.rewrite)
+            try require(events.count == 2, "A clipboard request must not report a link")
+        }
+        do { // A rich clipboard keeps its bold run through the markers.
+            let (coordinator, panel, general) = make(FakeRunner([.success("Kindly <s1>review</s1> the <s2>file</s2>")]))
+            RichTextBridge.write(sample(), rich: true, to: general)
+            coordinator.runFromClipboard(.rewrite)
+            spin { panel.hint == copy }
+            panel.performConfirm()
+            guard let copied = RichTextBridge.read(general) else { throw ConfigError.invalid("Rich result was not copied") }
+            try require(copied.string == "Kindly review the file" && isBold(copied, word: "review"), "Copied result keeps bold")
         }
         do { // Broken markers fall back to the base style with a note.
             let (coordinator, panel, general) = make(FakeRunner([.success("Kindly <s3>review</s3>")]))
-            let service = privatePasteboard()
-            defer { service.releaseGlobally() }
-            RichTextBridge.write(sample(), rich: true, to: service)
-            var note = ""
-            let timer = whenReady({ panel.hint == replace }) { note = panel.note; panel.performConfirm() }
-            var message: NSString = ""
-            coordinator.rewriteText(service, userData: "", error: &message)
-            timer.invalidate()
-            try require(note == "Formatting could not be kept.", "Fallback note")
-            try require(service.string(forType: .string) == "Kindly review" && general.string(forType: .string) == "Kindly review",
-                        "Fallback writes text without markers")
+            RichTextBridge.write(sample(), rich: true, to: general)
+            coordinator.runFromClipboard(.rewrite)
+            spin { panel.hint == copy }
+            try require(panel.note == "Formatting could not be kept.", "Fallback note")
+            panel.performConfirm()
+            try require(general.string(forType: .string) == "Kindly review", "Fallback copies text without markers")
         }
     }
 }
@@ -257,37 +302,6 @@ extension AITextVerification {
     /// Findings from the final review; each check failed before its fix.
     fileprivate static func reviewRegressions() throws {
         func check(_ condition: Bool, _ message: String) throws { if !condition { throw ConfigError.invalid(message) } }
-        let replace = "↩ Replace  ·  Esc Cancel"
-        do { // A Service delivered from a main-queue block must still receive the result.
-            let panel = AITextPanelController()
-            panel.presentsWindow = false
-            let general = privatePasteboard()
-            let coordinator = AITextCoordinator(panel: panel, runner: FakeRunnerForReview(answer: "Fixed."), general: general,
-                                                serviceDeadline: 3, timeout: 5)
-            let service = privatePasteboard()
-            defer { service.releaseGlobally() }
-            RichTextBridge.write(NSAttributedString(string: "fix me"), rich: false, to: service)
-            let timer = Timer.scheduledTimer(withTimeInterval: 0.02, repeats: true) { timer in
-                let fired = MainActor.assumeIsolated { () -> Bool in
-                    guard panel.hint == replace else { return false }
-                    panel.performConfirm()
-                    return true
-                }
-                if fired { timer.invalidate() }
-            }
-            var done = false
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    var message: NSString = ""
-                    coordinator.rewriteText(service, userData: "", error: &message)
-                    done = true
-                }
-            }
-            let deadline = Date().addingTimeInterval(5)
-            while !done, Date() < deadline { RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01)) }
-            timer.invalidate()
-            try check(service.string(forType: .string) == "Fixed.", "Service called from a main-queue block never got its result")
-        }
         do { // An attachment-only selection (an image) is not text.
             let pixel = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 1, pixelsHigh: 1, bitsPerSample: 8, samplesPerPixel: 4,
                                          hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
@@ -303,7 +317,7 @@ extension AITextVerification {
             panel.presentsWindow = false
             let general = privatePasteboard()
             let coordinator = AITextCoordinator(panel: panel, runner: FakeRunnerForReview(answer: "<text></text>"), general: general,
-                                                serviceDeadline: 3, timeout: 5)
+                                                timeout: 5)
             general.clearContents()
             general.setString("text", forType: .string)
             coordinator.runFromClipboard(.rewrite)

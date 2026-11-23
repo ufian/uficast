@@ -1,10 +1,10 @@
 # Progress and handoff
 
-Last updated: November 19, 2026 (America/Los_Angeles).
+Last updated: November 20, 2026 (America/Los_Angeles).
 
 ## Current state
 
-Requested personal-use features through Stage 6k are implemented; Stage 6l is integrated into main at the owner’s request, with remaining manual acceptance pending. Mandatory: ordinary Cmd+Space (either Command key), no Accessibility or Input Monitoring requirement/request. English UI and repository documents. Implementation checkpoint 69b1310 and README checkpoint 2db8863 were committed and pushed to origin/main. Feature checkpoint 0dfeda7 (inline hotkeys and built-in commands) is also pushed. Decaf icon checkpoint c362fdf is pushed. Script-folder checkpoint dae22c0 is pushed. Alias/error UX checkpoint c50f480 is pushed. Window-shortcut/power checkpoint 7ebcf04 is pushed to origin/main. The calendar increment was developed on codex/day0-calendar-experiment and has now been fast-forward merged into main through 72d765c at the owner’s explicit request. Stage 6m (configurable launcher shortcut, focus-display placement and a clock-contrast experiment) is implemented on main and awaits the owner's hands-on checks. Stage 6n (AI text rewrite and translation) is implemented on branch `feat/ai-text` and awaits review and the owner's checks.
+Requested personal-use features through Stage 6k are implemented; Stage 6l is integrated into main at the owner’s request, with remaining manual acceptance pending. Mandatory: ordinary Cmd+Space (either Command key), no Accessibility or Input Monitoring requirement/request. English UI and repository documents. Implementation checkpoint 69b1310 and README checkpoint 2db8863 were committed and pushed to origin/main. Feature checkpoint 0dfeda7 (inline hotkeys and built-in commands) is also pushed. Decaf icon checkpoint c362fdf is pushed. Script-folder checkpoint dae22c0 is pushed. Alias/error UX checkpoint c50f480 is pushed. Window-shortcut/power checkpoint 7ebcf04 is pushed to origin/main. The calendar increment was developed on codex/day0-calendar-experiment and has now been fast-forward merged into main through 72d765c at the owner’s explicit request. Stage 6m (configurable launcher shortcut, focus-display placement and a clock-contrast experiment) is implemented on main and awaits the owner's hands-on checks. Stage 6n (AI text rewrite and translation) is implemented on branch `feat/ai-text` and awaits review and the owner's checks. Stage 6s (the built-in `gh` GitHub pull requests command) is implemented on main and awaits the owner's manual acceptance.
 
 | Stage | State | Evidence / remaining work |
 | --- | --- | --- |
@@ -26,6 +26,10 @@ Requested personal-use features through Stage 6k are implemented; Stage 6l is in
 | 6m — Launcher shortcut, focus display, clock contrast | Implemented; clock owner-confirmed | 57 core tests, six native checks and light/dark previews pass. Owner confirmed the clock is readable on an inactive display. Physical shortcut delivery and two-display placement are not yet observed. |
 | 6n — AI text rewrite and translation | Implemented and merged; owner reported it works | 78 core tests and `--verify-ai-text` (fakes, private pasteboards) pass. Real Services replacement, formatting in Mail/Notes and clipboard use in Electron apps are not yet observed. |
 | 6o — Calculator | Implemented and merged into main (fast-forward) at the owner's request; installed locally | 93 core tests and `--verify-calculator` (private pasteboard) pass. Physical typing, paste into another app and relaunch persistence not yet observed by the owner. |
+| 6p — Persistent frequency ordering | Implemented and merged into main (fast-forward) at the owner's request; installed locally | 99 core tests and `--verify-usage-order` pass. Real relaunch ordering not yet observed by the owner. |
+| 6q — Shortcuts instead of Services | Implemented on main; file import failed, replaced by guided manual steps; owner reported it works | 107 core tests and `--verify-ai-text` pass. Shortcuts refused the generated file as unsigned. The owner built the shortcut by hand and it works from Cmd+Ctrl+Shift+R (Ctrl+Cmd+R did nothing). Selection input in each app and Electron apps are not individually reported. |
+| 6r — Compact settings | Implemented on main; installed locally; owner look pending | 107 core tests and all native checks pass; light/dark previews inspected. Hands-on use not yet reported. |
+| 6s — GitHub pull requests | Implemented on main; manual acceptance pending | 136 core tests and `--verify-pull-requests` pass (fake `gh`, fake clock, fixtures). A real `gh` run, the browser opening and the physical Tab/Enter flow are not yet observed. |
 | 7 — Daily-use handoff | Partial | README guide, three neutral screenshots and source-only release build/signature verification complete. Hands-on evidence gaps remain. Manual evidence gaps listed below. |
 
 ## Implementation map
@@ -283,6 +287,98 @@ Owner check (November 19, 2026): the build from `feat/ai-text` (891df35) was ins
 - Installed: the running app was quit normally, rebuilt into the owner's local output folder and reopened.
 - Not performed: typing in the real launcher, paste into another app, relaunch persistence with a real draft, and anything with the owner's real history. Items are in `docs/MANUAL_TESTS.md` under Calculator.
 
+## Stage 6p — Persistent frequency ordering
+
+- Owner request (November 20, 2026): sort launcher applications by frequency of use. The ranking already used counts inside a session (empty search and ties), but `launcher.usage` was in memory only, so every restart returned to alphabetical order.
+- Builder calls: keep the match tiers (an exact alias must still win) and only persist and widen what counts. Counts live in UserDefaults `usage.v1` through the new `UsageStore` (identifiers, counts and dates only; 1,000 most recent entries; corrupt or non-positive data is ignored). `LauncherPanelController.recordUse` is the single counting point, now also used when an app hotkey activates a running app. Hiding an app does not count. No time decay.
+- Checks actually performed (with `SDKROOT=…MacOSX26.5.sdk`): `scripts/test.sh --build-system native` **99 core tests passed** (6 new, first seen failing to compile). `--verify-usage-order` (written first, seen failing to compile) passes: alphabetical without history, reordering after recorded uses, a save report per use, and the same order in a second controller loaded from the encoded data. `--verify-calculator` still passes.
+- Not performed: relaunching the real app and observing the order, and the app-hotkey counting. Items are in `docs/MANUAL_TESTS.md` under Frequency ordering.
+- Integration: `feat/usage-ranking` was fast-forward merged into local main at the owner's request and the branch was deleted. Not pushed yet.
+- Also this session: the merged `feat/calculator` branch was deleted locally and in the fork, and `AGENTS.md` (which `CLAUDE.md` links to) gained the rule to quit and relaunch the app after every build.
+
+## Stage 6q — Shortcuts instead of Services
+
+- Owner request (November 20, 2026): remove the macOS Services (useless) and ask for a Shortcut that takes the selected text, else the clipboard, and a Settings button to create it. The owner chose to try it as built and redo it if it does not work.
+- Research before building (sources in the chat): a Shortcut that is a Quick Action with "If there's no input: Get Clipboard" gives exactly selected-text-else-clipboard, but the selection reaches it through the Services mechanism, so apps that do not offer Services (many Electron apps) fall back to the clipboard. Apple's documentation does not confirm that the shortcut's own keyboard shortcut passes the selection. `shortcuts sign` was run on a minimal file and failed even in local mode without an iCloud sign-in, so signing cannot be relied on. App Intents were rejected: SwiftPM does not produce `Metadata.appintents` and the workaround needs Xcode's `appintentsmetadataprocessor`.
+- Builder calls:
+  - A `uficast://rewrite|translate?text=…` link is the hand-off (plain text, one way). Enter copies; replacement of the selection and formatting for linked text are gone.
+  - Any app or page can open such a link, so a link only starts a request: no copy until Enter, 20,000-character limit, a link without text uses the clipboard.
+  - The Services machinery (nested event loop, replace mode, `NSServices`, `servicesProvider`) was deleted rather than kept dormant.
+  - First try: a generated `.shortcut` file with URL Encode, URL and Open URLs actions. It failed on the owner's Mac; see "Redo" below.
+- Checks actually performed (with `SDKROOT=…MacOSX26.5.sdk`):
+  - `scripts/test.sh --build-system native`: **107 core tests passed** (8 new for link parsing and the shortcut plist structure and UUID chain, first seen failing to compile). Warm search p95 **18.23 ms**.
+  - `--verify-ai-text` was rewritten first (it failed to compile) and passes: panel hints (Copy only), clipboard rewrite, Esc during work, failure and retry, link text instead of clipboard, link without text, overlong and unknown links refused, rich clipboard keeping bold, broken-marker fallback. All other native checks pass on the isolated release build, whose Info.plist has the `uficast` scheme and no `NSServices`.
+  - The General settings preview (light) was inspected: the AI Text section shows the two Create buttons and the explanation.
+- Owner result (November 20, 2026): Create Shortcut opened Shortcuts, which answered **"Importing unsigned shortcut files is not supported. Please use another sharing option."** The file route is closed on this Mac (`shortcuts sign` also needs an iCloud sign-in).
+- Redo (same day): `ShortcutFile` and its tests were deleted. New `ShortcutGuide` (UficastCore) holds the name, five steps and a one-line Run Shell Script script. The buttons now copy that script, open `shortcuts://create-shortcut` and make General → AI Text show the steps (`SettingsModel.shortcutGuide`).
+  - 3 core tests run the script in zsh with a stub `open` and read the recorded link back through `AITextURL`, including quotes, `$`, backticks, `&`, `+`, `%`, Cyrillic, newlines and empty input.
+  - 107 core tests pass in total. The General preview with the steps (`--preview-settings … --general --ai-guide`) was inspected. The `uficast` scheme is registered with Launch Services (read-only `lsregister -dump`).
+- Not performed: building the shortcut by hand, the real wording of Shortcuts' controls versus the steps, the selection input in real apps, the shortcut's own keyboard shortcut, and real link delivery by `open "uficast://…"` (it would start a real AI request). Items are in `docs/MANUAL_TESTS.md` under AI text.
+- Owner report (November 20, 2026): the hand-built shortcut works when run by hand, but its keyboard shortcut (Ctrl+Cmd+R, shortcut "Rewrite") does nothing. Root cause not found yet.
+  - Established: the script, the link and the panel work (manual run). Uficast's own hotkeys do not include Ctrl+Cmd+R (only Translate-from-clipboard is Ctrl+Cmd+T); no system symbolic hotkey uses it.
+  - Dead ends: the unified log is not readable here (`Operation not permitted`, `log stream` needs admin). An early "no log lines" result was invalid because zsh's builtin `log` ran instead of `/usr/bin/log`.
+  - Hypotheses at the time: (1) the hotkey is a Services key equivalent, which does nothing without a selection or in apps without Services; (2) Shortcuts only fires hotkeys while the Shortcuts app runs; (3) a conflict with another app; (4) the result panel is closed at once by a focus change when the shortcut finishes.
+  - **Resolved:** the owner changed the combination to Cmd+Ctrl+Shift+R and everything worked. Because nothing else changed, hypotheses 1, 2 and 4 do not explain it; Ctrl+Cmd+R was most likely taken by another app. Which app was not identified. The guide's last step now recommends a ⌃⌘⇧ combination and says why. The diagnostics stay: they are cheap and text-free.
+  - Diagnostics added so the next test discriminates: Recent Runs now records "<Action> link received (N characters)." when a link arrives and "The result panel closed because it lost focus." when the panel closes that way. No link text is recorded. `--verify-ai-text` covers both and the absence of a false report after Enter.
+- The deploy order rule in `AGENTS.md` changed the same day: build to a staging folder, quit the old app, copy the build over the owner's bundle, open the new app.
+- The hotkey-delivery check in `AITextVerification.swift` (`hotkeyDelivery`, written by another session) was in the working tree throughout; it passes inside `--verify-ai-text` and was committed on November 20, 2026 at the owner's request. It sends the Carbon hotkey events to the application target, so no key is typed and no privacy grant is involved.
+
+## Stage 6r — Compact settings
+
+- Owner request (November 20, 2026): make the settings page compact and good-looking instead of a long scroll, with almost every element on one row. The owner approved option A of two: a single page of two-column cards (option B, a sidebar of sub-pages, was declined). The owner also sent a screenshot of how Shortcuts opens a new shortcut ("Title" at the top left, ⓘ and an action library on the right), which matches the steps; they now say "Click “Title”", "Click ⓘ" and "Search Actions for Run Shell Script".
+- Built: `SettingsCard` and `InfoButton` (`SettingsCards.swift`); a two-column General (Launcher, Menu Bar Clock, Power & Keyboard | AI Text, Application Folders, Configuration) in `ViewThatFits`, with a `ScrollView` fallback for tiny windows; a slim capsule top bar; a footer with a truncated status and a Recent Runs popover; the shortcut steps in a sheet. Window default 980×640, minimum 820×540. Long captions moved behind ⓘ; status lines stay as one or two caption lines. The footer padding that clipped the status text in the owner's screenshot is now a plain 16 pt.
+- Unchanged: every control's behavior, bindings and accessibility labels; the Commands page (only its top bar changed).
+- Checks actually performed (with `SDKROOT=…MacOSX26.5.sdk`):
+  - **107 core tests passed**; warm search p95 **18.07 ms**. The guide's steps tests still pass with the new wording.
+  - All nine native checks pass on the release build in the staging folder, including the ones that host the Settings view (recorder, alias editor, keyboard shortcuts).
+  - Offscreen General previews in light and dark at the default size show everything without scrolling; a 420-point-high window falls back to scrolling. The guide sheet and the regenerated Commands screenshot (`docs/screenshots/commands.png`) were inspected. The other three README screenshots were not touched.
+- Not performed: using the new page by hand (popovers, every button, the sheet over the real window), a check at minimum window size on a real display, and the Recent Runs popover with real runs. Items are in `docs/MANUAL_TESTS.md` under Compact settings.
+- Deploy followed the new order: build into `.build/staging`, normal quit of the old app, copy over the owner's bundle, open.
+
+### AI result panel text size
+
+The owner found the translation in the AI result panel too small: results without a source font were drawn as 12 pt Helvetica. At the owner's request the shown copy now uses the font of the owner's iTerm profile (Meslo LG S NF Mono, 16 pt, vertical spacing 1.0, so the natural line height), with the system monospaced font as the fallback when Meslo is not installed. Source fonts only contribute bold/italic; source paragraph styles are dropped for display. The copied result is unchanged. Failure/working text uses the same font, and the panel grew from 720×340 to 760×420. `--verify-ai-text` passes. The build needed `SDKROOT=…/MacOSX26.5.sdk` (the unresolved toolchain note above). The panel itself is not previewed offscreen, so the owner's look at a real translation is pending. The new build is installed and running.
+
+### Translate returned English unchanged
+
+The owner saw Translate return the English source as English. Cause: the prompt said "if it is mainly Russian, translate into English; otherwise into Russian", and Claude Haiku 5.5 sometimes ignored the condition, most often for formatted (style-marker) text copied from a browser. A neutral reproduction returned English in 1 of 3 marker runs and 0 of 3 plain runs. The direction is now decided in code (`AITextPrompt.isMainlyRussian`: Cyrillic letters outnumber Latin ones, markers ignored) and named in the prompt ("from English into Russian. The result must be written in Russian."). A neutral reproduction with the new prompt translated in 9 of 9 parallel runs. 108 core tests (one new) and `--verify-ai-text` pass; the build used the `SDKROOT` workaround. Real use of Translate from the owner's shortcut is pending.
+
 ### Earlier cursor report checkpoint
 
 Commit 62e8296 preserved an unrelated stationary-cursor report. Its source/disappearance was not established; no app code changed for that report. Do not treat it as a verified Uficast defect or interact with unrelated apps to investigate it without a new request.
+
+## Stage 6s: GitHub pull requests
+
+- Owner request (November 20, 2026): reach one of the owner's open pull requests from the launcher: `gh` -> Tab -> type to filter -> Enter opens it in the browser. Approved design `docs/superpowers/specs/2026-11-20-github-pull-requests-design.md` (the owner changed two things: `gh` is found on `PATH`, and a missing `gh` only shows an install message; the 5-minute cache lifetime was added at the owner's request). Requirements: REQUIREMENTS "GitHub pull requests"; architecture: ARCHITECTURE "GitHub pull requests (Stage 6s)".
+- Built (Tasks 1-6 and one fix wave after the final whole-branch review, all on main):
+  - `PullRequest`, `PullRequestParser` and `PullRequestFilter` in `Sources/UficastCore/PullRequest.swift`.
+  - `GitHubPullRequestLoader` and `GitHubCLI` (finds `gh` on `PATH` plus the standard directories).
+  - `PullRequestStore`: shares one load, caches success for 5 minutes, `invalidate()`, `cancel()`.
+  - `BuiltInCommand.pullRequests` (alias `gh`).
+  - The pull-request mode in `LauncherPanelController` and the routing in `AppController`.
+- Builder calls: pull-request mode is its own mode that reuses the token, field and table; Enter on the entry behaves like Tab; a late success is cached and a late failure is dropped; only the command's usage counter is recorded (no pull request data on disk); drafts included and labelled; 100 newest open pull requests; no refresh control.
+- Final-review rulings: the `gh` command matches its alias only exactly (`LauncherEntry.matchesAliasByPrefix` is false for it), so typing `g` alone no longer ranks the command by alias (it can still match by its name, ordered by use frequency) while `cafe`/`decafe` keep prefix matching; `enterPullRequests` returns nil when the panel is hidden or the mode is already on; a catalog refresh no longer replaces the mode's empty text.
+
+- Owner feedback after the first real look (November 20, 2026): pull request rows no longer show "Pull Request" on the right; the title uses the full row width and `owner/repo #number` (plus ` · Draft`) is a subtitle below it. Ordinary rows are unchanged. `--verify-pull-requests` gained a "row layout" check (kind hidden, title reaches the right edge, subtitle under the title, ordinary row unchanged); it was seen failing first and then passing. The on-screen look of the new row has not been inspected (no screenshot).
+
+Checks actually performed (with `SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk`, the unresolved toolchain note above):
+
+- `scripts/test.sh --build-system native`: **136 core tests passed** (exit 0). New tests cover the pull-request model, parser and filter, the loader (with a fake `gh` script), the store (with a fake clock), the built-in command and the exact-alias ranking of `gh`.
+- A staging build (`UFICAST_OUTPUT_ROOT=.build/staging`) succeeded, and the native checks `--verify-pull-requests`, `--verify-calculator`, `--verify-usage-order`, `--verify-script-feedback` and `--verify-native-icons` each exited 0 with their PASS line (exit codes read directly).
+- Every task had a spec-compliance and quality review (all approved, no Critical or Important findings); the final whole-branch review and a scoped re-review of its fix wave were also run.
+
+Not observed (pending, none of these is recorded as passed):
+
+- A real `gh` run with real pull requests.
+- The browser actually opening the selected pull request.
+- The physical Tab/Enter/typing flow in the real launcher.
+- The on-screen layout of the mode (no screenshot was taken).
+- A signed-out `gh`; the not-installed message is covered by unit tests only.
+- Cache expiry in real time (it is unit-tested with a fake clock only).
+- AppController routing (no automated test).
+
+Known gaps accepted after review (Minor, not fixed): store tests do not pin the slot-id guard or a loader that ignores cancellation; the Tab check in `--verify-pull-requests` would also pass without the Tab swallow; Cmd+F does not leave the mode; quitting cancels a running `gh` but does not wait for the child to stop; the cache age uses the wall clock; a timed-out `gh` shows no stderr; the parser drops rows with fractional-second dates; `LauncherPanelController.swift` grew to about 1,100 lines because the native check lives in the production file (existing pattern).
+
+Documented limitations: at most the 100 newest open pull requests; `gh`'s default host only; `GH_HOST` set in a terminal profile is not visible to a GUI app; a `gh` that is only in a directory added by a terminal profile (for example `~/.local/bin`) counts as not installed; pull requests in SSO-restricted organizations may be missing without any error; no manual refresh control (the list is reloaded on the first entry after 5 minutes).
+
+**Exact next step:** the owner quits Uficast normally, installs/uses the current build, and runs the items under "GitHub pull requests" in `docs/MANUAL_TESTS.md` (real `gh` with real pull requests, signed-out `gh`, first Tab latency, reload after 5 minutes, Keep Awake untouched, Esc/Backspace, light and dark layout). Record the results here. The earlier open items above stay open.

@@ -1,5 +1,8 @@
 # AI text rewrite and translation
 
+> **Update, November 20, 2026:** the macOS Services entry point described below was removed at the owner's request (it was not useful). Shortcuts that open `uficast://` links replace it; see REQUIREMENTS "AI text rewrite and translation" and ARCHITECTURE "Create Shortcut (Stage 6q)". Replacement of the selection and the Service deadline no longer exist.
+
+
 Status: approved by the owner on November 19, 2026. Spike done (see the end).
 
 ## Intent
